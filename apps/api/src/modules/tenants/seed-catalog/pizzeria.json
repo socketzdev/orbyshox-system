@@ -1,0 +1,45 @@
+{
+  "categories": [
+    {
+      "name": "Pizzas Tradicionais",
+      "order": 1,
+      "products": [
+        {
+          "name": "Pizza Calabresa Especial",
+          "description": "Molho de tomate pelado italiano, calabresa defumada fatiada, cebola roxa e azeitonas pretas.",
+          "priceCents": 5490,
+          "modifierGroups": [
+            {
+              "name": "Borda Recheada",
+              "minSelectable": 0,
+              "maxSelectable": 1,
+              "isRequired": false,
+              "items": [
+                { "name": "Borda de Catupiry Original", "priceCents": 800 },
+                { "name": "Borda de Cheddar Cremoso", "priceCents": 800 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Pizza Quatro Queijos",
+          "description": "Mussarela artesanal, provolone defumado, gorgonzola e catupiry legítimo.",
+          "priceCents": 6290,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Bebidas",
+      "order": 2,
+      "products": [
+        {
+          "name": "Refrigerante 2L",
+          "description": "Garrafa 2 Litros gelada.",
+          "priceCents": 1400,
+          "modifierGroups": []
+        }
+      ]
+    }
+  ]
+}

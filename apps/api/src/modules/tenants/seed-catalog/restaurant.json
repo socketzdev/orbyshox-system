@@ -1,0 +1,116 @@
+{
+  "categories": [
+    {
+      "name": "Entradas & Petiscos",
+      "order": 1,
+      "products": [
+        {
+          "name": "Bolinho de Peixe Artesanal",
+          "description": "Bolinhos crocantes de peixe branco selecionado temperados com ervas frescas e raspas de limão siciliano. Acompanha maionese da casa.",
+          "priceCents": 2500,
+          "modifierGroups": []
+        },
+        {
+          "name": "Croquete de Salmão Defumado",
+          "description": "Croquetes cremosos de salmão fresco e defumado com cream cheese e cebolinha francesa, empanados em farinha panko dourada.",
+          "priceCents": 3000,
+          "modifierGroups": []
+        },
+        {
+          "name": "Shimeji Especial na Manteiga",
+          "description": "Cogumelos shimeji frescos salteados na manteiga da fazenda com molho shoyu premium, saquê mirin e cebolinha verde picada.",
+          "priceCents": 3800,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Cortes Nobres & Grelhados",
+      "order": 2,
+      "products": [
+        {
+          "name": "Bife de Chorizo Angus 350g",
+          "description": "Corte nobre do contrafilé de novilho precoce com capa de gordura marcante e excelente marmoreio, selado na brasa de carvão vegetal.",
+          "priceCents": 9000,
+          "modifierGroups": [
+            {
+              "name": "Ponto da Carne",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                { "name": "Mal Passado", "priceCents": 0 },
+                { "name": "Ao Ponto", "priceCents": 0 },
+                { "name": "Bem Passado", "priceCents": 0 }
+              ]
+            },
+            {
+              "name": "Guarnições & Acompanhamentos",
+              "minSelectable": 0,
+              "maxSelectable": 3,
+              "isRequired": false,
+              "items": [
+                { "name": "Farofa Crocante de Castanhas", "priceCents": 1400 },
+                { "name": "Batatas Rústicas com Alecrim", "priceCents": 1800 },
+                { "name": "Arroz Biro-Biro com Bacon", "priceCents": 1600 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Prime Rib Grelhado na Brasa 600g",
+          "description": "Corte majestoso com osso que concentra sabor e suculência ímpar. Servido com redução aromática e chimichurri fresco.",
+          "priceCents": 15000,
+          "modifierGroups": [
+            {
+              "name": "Ponto da Carne",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                { "name": "Mal Passado", "priceCents": 0 },
+                { "name": "Ao Ponto", "priceCents": 0 },
+                { "name": "Bem Passado", "priceCents": 0 }
+              ]
+            },
+            {
+              "name": "Molhos Artesanais",
+              "minSelectable": 0,
+              "maxSelectable": 2,
+              "isRequired": false,
+              "items": [
+                { "name": "Chimichurri da Casa", "priceCents": 0 },
+                { "name": "Molho Demi-Glace com Vinho Tinto", "priceCents": 1200 },
+                { "name": "Manteiga de Ervas e Alho Confitado", "priceCents": 900 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bebidas & Harmonização",
+      "order": 3,
+      "products": [
+        {
+          "name": "Água Mineral Prata 500ml",
+          "description": "Disponível com ou sem gás.",
+          "priceCents": 600,
+          "modifierGroups": []
+        },
+        {
+          "name": "Suco de Laranja Integral 400ml",
+          "description": "100% natural, espremido na hora.",
+          "priceCents": 1200,
+          "modifierGroups": []
+        },
+        {
+          "name": "Cerveja Artesanal IPA 500ml",
+          "description": "Cerveja lupulada com notas cítricas e amargor equilibrado.",
+          "priceCents": 2800,
+          "modifierGroups": []
+        }
+      ]
+    }
+  ]
+}

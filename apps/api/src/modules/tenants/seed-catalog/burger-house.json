@@ -1,0 +1,176 @@
+{
+  "categories": [
+    {
+      "name": "Hambúrgueres Artesanais",
+      "order": 1,
+      "products": [
+        {
+          "name": "Smash Burger Clássico",
+          "description": "Pão brioche tostado na manteiga, 2x blends smash 90g, queijo cheddar fatiado derretido, picles da casa e molho especial.",
+          "priceCents": 2890,
+          "modifierGroups": [
+            {
+              "name": "Ponto da Carne",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                { "name": "Ao Ponto (Recomendado)", "priceCents": 0 },
+                { "name": "Bem Passado", "priceCents": 0 },
+                { "name": "Ao Ponto para Menos", "priceCents": 0 }
+              ]
+            },
+            {
+              "name": "Turbine seu Burger",
+              "minSelectable": 0,
+              "maxSelectable": 4,
+              "isRequired": false,
+              "items": [
+                { "name": "Bacon Crocante Fatiado", "priceCents": 500 },
+                { "name": "Cheddar Cremoso Extra", "priceCents": 450 },
+                { "name": "Hambúrguer Smash 90g Extra", "priceCents": 800 },
+                { "name": "Cebola Caramelizada", "priceCents": 350 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Duplo Bacon Supreme",
+          "description": "Pão australiano macio, 2x blends bovinos 120g, fatias generosas de bacon artesanal crocante, cheddar inglês e maionese defumada.",
+          "priceCents": 3890,
+          "modifierGroups": [
+            {
+              "name": "Ponto da Carne",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                { "name": "Ao Ponto", "priceCents": 0 },
+                { "name": "Bem Passado", "priceCents": 0 },
+                { "name": "Ao Ponto para Menos", "priceCents": 0 }
+              ]
+            },
+            {
+              "name": "Adicionais Especiais",
+              "minSelectable": 0,
+              "maxSelectable": 3,
+              "isRequired": false,
+              "items": [
+                { "name": "Queijo Coalho Grelhado", "priceCents": 600 },
+                { "name": "Ovo Frito na Manteiga", "priceCents": 300 },
+                { "name": "Geleia de Pimenta Biquinho", "priceCents": 400 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Chicken Crispy Burger",
+          "description": "Sobrecoxa de frango marinada e empanada ultracrocante, salada coleslaw cremosa, queijo prato e maionese de alho negro.",
+          "priceCents": 2990,
+          "modifierGroups": [
+            {
+              "name": "Pimenta e Molho",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                { "name": "Molho Suave (Sem Pimenta)", "priceCents": 0 },
+                { "name": "Molho Spicy Buffalo (Picante)", "priceCents": 0 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Acompanhamentos & Porções",
+      "order": 2,
+      "products": [
+        {
+          "name": "Batata Frita Rústica Especial",
+          "description": "Batatas cortadas à mão com casca, temperadas com alecrim fresco e flor de sal.",
+          "priceCents": 2190,
+          "modifierGroups": [
+            {
+              "name": "Escolha o Molho",
+              "minSelectable": 1,
+              "maxSelectable": 2,
+              "isRequired": true,
+              "items": [
+                { "name": "Maionese Verde da Casa", "priceCents": 0 },
+                { "name": "Barbecue Rústico", "priceCents": 0 },
+                { "name": "Cheddar Cremoso com Bacon", "priceCents": 500 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Onion Rings Crocantes",
+          "description": "Anéis de cebola doce empanados em farinha panko crocante, servidos com molho barbecue.",
+          "priceCents": 2490,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Bebidas & Refrigerantes",
+      "order": 3,
+      "products": [
+        {
+          "name": "Coca-Cola Original 350ml",
+          "description": "Lata gelada 350ml",
+          "priceCents": 700,
+          "modifierGroups": []
+        },
+        {
+          "name": "Coca-Cola Zero 350ml",
+          "description": "Lata gelada sem açúcar 350ml",
+          "priceCents": 700,
+          "modifierGroups": []
+        },
+        {
+          "name": "Suco Natural de Laranja 400ml",
+          "description": "Feito na hora com laranjas frescas selecionadas.",
+          "priceCents": 1000,
+          "modifierGroups": [
+            {
+              "name": "Opção de Açúcar",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                { "name": "Sem Açúcar", "priceCents": 0 },
+                { "name": "Com Açúcar", "priceCents": 0 },
+                { "name": "Com Adoçante", "priceCents": 0 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Cerveja Heineken Long Neck 330ml",
+          "description": "Long neck estupidamente gelada 330ml.",
+          "priceCents": 1200,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Sobremesas",
+      "order": 4,
+      "products": [
+        {
+          "name": "Milkshake de Nutella & Ninho 400ml",
+          "description": "Sorvete artesanal batido com leite Ninho e muita Nutella legítima.",
+          "priceCents": 2200,
+          "modifierGroups": []
+        },
+        {
+          "name": "Brownie com Sorvete de Creme",
+          "description": "Brownie de chocolate meio amargo quentinho servido com bola de sorvete de baunilha e calda de chocolate.",
+          "priceCents": 1800,
+          "modifierGroups": []
+        }
+      ]
+    }
+  ]
+}

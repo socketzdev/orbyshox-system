@@ -1,0 +1,188 @@
+{
+  "categories": [
+    {
+      "name": "Pastéis Salgados Tradicionais",
+      "order": 1,
+      "products": [
+        {
+          "name": "Pastel de Carne Especial",
+          "description": "Massa sequinha e crocante recheada com carne moída de primeira refogada com cebola, alho, cheiro verde e azeitonas.",
+          "priceCents": 1400,
+          "modifierGroups": [
+            {
+              "name": "Turbine seu Recheio",
+              "minSelectable": 0,
+              "maxSelectable": 3,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Queijo Mussarela Extra Derretido",
+                  "priceCents": 400
+                },
+                {
+                  "name": "Ovo Cozido Picadinho",
+                  "priceCents": 250
+                },
+                {
+                  "name": "Catupiry Original",
+                  "priceCents": 450
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Pastel de Queijo Mussarela Duplo",
+          "description": "Massa crocante com camada generosa de queijo mussarela derretido e uma pitada de orégano fresco.",
+          "priceCents": 1400,
+          "modifierGroups": []
+        },
+        {
+          "name": "Pastel de Pizza Paulistano",
+          "description": "Queijo mussarela, presunto fatiado, rodelas de tomate fresco e orégano chileno.",
+          "priceCents": 1500,
+          "modifierGroups": []
+        },
+        {
+          "name": "Pastel de Frango com Catupiry Legítimo",
+          "description": "Peito de frango desfiado suculento com tempero caseiro e generosa camada de Catupiry legítimo.",
+          "priceCents": 1600,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Pastéis Nobres & Gourmet",
+      "order": 2,
+      "products": [
+        {
+          "name": "Pastel de Camarão com Cream Cheese",
+          "description": "Camarões selecionados refogados no azeite de dendê e ervas finas com recheio cremoso de cream cheese.",
+          "priceCents": 2400,
+          "modifierGroups": [
+            {
+              "name": "Adicionais do Chefe",
+              "minSelectable": 0,
+              "maxSelectable": 2,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Catupiry Extra",
+                  "priceCents": 450
+                },
+                {
+                  "name": "Molho de Pimenta da Casa (Pote)",
+                  "priceCents": 300
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Pastel de Carne Seca com Queijo Coalho",
+          "description": "Carne seca desfiada e dessalgada artesanalmente com queijo coalho tostado e cebola roxa.",
+          "priceCents": 2200,
+          "modifierGroups": []
+        },
+        {
+          "name": "Pastel de Palmito Especial com Mussarela",
+          "description": "Corações de palmito macios refogados com ervas e queijo mussarela derretido.",
+          "priceCents": 1800,
+          "modifierGroups": []
+        },
+        {
+          "name": "Pastel Costela Desfiada com Barbecue",
+          "description": "Costela bovina marinada 12h, desfiada com queijo cheddar cremoso e molho barbecue rústico.",
+          "priceCents": 2200,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Pastéis Doces Especiais",
+      "order": 3,
+      "products": [
+        {
+          "name": "Pastel de Nutella com Morangos Frescos",
+          "description": "Pastel doce recheado com Nutella original pura e lâminas de morango fresco, polvilhado com açúcar e canela.",
+          "priceCents": 1800,
+          "modifierGroups": [
+            {
+              "name": "Acompanhamentos",
+              "minSelectable": 0,
+              "maxSelectable": 1,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Bola de Sorvete de Creme",
+                  "priceCents": 600
+                },
+                {
+                  "name": "Leite Ninho em Pó Salpicado",
+                  "priceCents": 300
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Pastel Romeu & Julieta",
+          "description": "Combinação clássica irresistível de queijo minas padrão com goiabada cascão cremosa derretida.",
+          "priceCents": 1500,
+          "modifierGroups": []
+        },
+        {
+          "name": "Pastel de Doce de Leite com Banana e Canela",
+          "description": "Doce de leite artesanal cremoso com rodelas de banana e canela polvilhada.",
+          "priceCents": 1500,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Caldo de Cana & Bebidas Geladas",
+      "order": 4,
+      "products": [
+        {
+          "name": "Caldo de Cana Moído na Hora 500ml",
+          "description": "Caldo de cana puro e super gelado, extraído na hora do pedido.",
+          "priceCents": 1000,
+          "modifierGroups": [
+            {
+              "name": "Sabor do Caldo de Cana",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                {
+                  "name": "Puro Tradicional",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Com Limão Taiti Fresco",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Com Suco de Abacaxi Natural",
+                  "priceCents": 200
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Vinagrete Especial da Casa (Pote 150g)",
+          "description": "Vinagrete fresco temperado com azeite extravirgem, tomate, cebola, pimentão e ervas finas.",
+          "priceCents": 500,
+          "modifierGroups": []
+        },
+        {
+          "name": "Refrigerante Lata 350ml",
+          "description": "Lata geladinha (Coca-Cola, Guaraná Antarctica, etc.)",
+          "priceCents": 700,
+          "modifierGroups": []
+        }
+      ]
+    }
+  ]
+}

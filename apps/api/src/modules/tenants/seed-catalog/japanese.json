@@ -1,0 +1,290 @@
+{
+  "categories": [
+    {
+      "name": "Entradas & Sushis Especiais",
+      "order": 1,
+      "products": [
+        {
+          "name": "Bolinho de Peixe Artesanal",
+          "description": "Bolinhos dourados e crocantes de peixe branco selecionado com raspas de limão e molho ponzu especial.",
+          "priceCents": 2500,
+          "modifierGroups": [
+            {
+              "name": "Molho de Acompanhamento",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                {
+                  "name": "Molho Ponzu Cítrico",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Maionese Spicy da Casa",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Molho Tarê Tradicional",
+                  "priceCents": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Croquete de Salmão Defumado",
+          "description": "Croquetes cremosos de salmão fresco e defumado com cream cheese e cebolinha, empanados em farinha panko japonesa.",
+          "priceCents": 3000,
+          "modifierGroups": [
+            {
+              "name": "Molho Extra",
+              "minSelectable": 0,
+              "maxSelectable": 1,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Geleia de Pimenta Suave",
+                  "priceCents": 400
+                },
+                {
+                  "name": "Molho Especial do Chef",
+                  "priceCents": 500
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Shimeji na Manteiga Especial",
+          "description": "Cogumelos shimeji frescos salteados na manteiga com shoyu nobre, saquê mirin e cebolinha verde fatiada fininha.",
+          "priceCents": 3800,
+          "modifierGroups": []
+        },
+        {
+          "name": "Carpaccio de Salmão com Trufas",
+          "description": "Lâminas finas de salmão fresco temperadas com azeite trufado, flor de sal, raspas de limão siciliano e gergelim.",
+          "priceCents": 5400,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "name": "Combinados, Temakis & Rolls",
+      "order": 2,
+      "products": [
+        {
+          "name": "Combinado Salmão & Atum (20 Peças)",
+          "description": "Seleção especial com 6 sashimis de salmão, 4 sashimis de atum, 4 niguiris maçaricados e 6 uramakis com gergelim.",
+          "priceCents": 8900,
+          "modifierGroups": [
+            {
+              "name": "Acompanhamentos",
+              "minSelectable": 0,
+              "maxSelectable": 3,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Gengibre em Conserva Extra",
+                  "priceCents": 400
+                },
+                {
+                  "name": "Wasabi Premium Extra",
+                  "priceCents": 300
+                },
+                {
+                  "name": "Molho Tarê Artesanal (Pote)",
+                  "priceCents": 450
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Temaki Salmão Completo",
+          "description": "Cone crocante de alga nori recheado com cubos de salmão fresco, cream cheese Philadelphia e cebolinha.",
+          "priceCents": 3200,
+          "modifierGroups": [
+            {
+              "name": "Preferências do Temaki",
+              "minSelectable": 0,
+              "maxSelectable": 3,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Sem Cebolinha",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Sem Cream Cheese",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Gergelim Tostado Extra",
+                  "priceCents": 200
+                },
+                {
+                  "name": "Salmão Grelhado no lugar do cru",
+                  "priceCents": 300
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Hot Roll Salmão Especial (8 Peças)",
+          "description": "Sushi empanado e frito na hora, recheado com salmão e cream cheese, coberto com molho tarê e cebolinha.",
+          "priceCents": 3600,
+          "modifierGroups": [
+            {
+              "name": "Cobertura do Hot Roll",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                {
+                  "name": "Tarê Tradicional e Cebolinha",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Geleia de Pimenta e Couve Crocante",
+                  "priceCents": 400
+                },
+                {
+                  "name": "Cheddar e Bacon Crocante",
+                  "priceCents": 500
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cortes Nobres & Grelhados Contemporâneos",
+      "order": 3,
+      "products": [
+        {
+          "name": "Bife de Chorizo Grelhado 350g",
+          "description": "Corte nobre de contrafilé angus com marmoreio excepcional, selado na brasa com sal grosso de parrilla.",
+          "priceCents": 9000,
+          "modifierGroups": [
+            {
+              "name": "Ponto da Carne",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                {
+                  "name": "Mal Passado",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Ao Ponto",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Bem Passado",
+                  "priceCents": 0
+                }
+              ]
+            },
+            {
+              "name": "Molho & Acompanhamento",
+              "minSelectable": 0,
+              "maxSelectable": 2,
+              "isRequired": false,
+              "items": [
+                {
+                  "name": "Molho Chimichurri Especial",
+                  "priceCents": 850
+                },
+                {
+                  "name": "Farofa Crocante de Panko",
+                  "priceCents": 1200
+                },
+                {
+                  "name": "Legumes Salteados no Wok",
+                  "priceCents": 1600
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Prime Rib na Parrilla 600g",
+          "description": "Corte imponente com osso longo, altíssima suculência e sabor marcante defumado.",
+          "priceCents": 15000,
+          "modifierGroups": [
+            {
+              "name": "Ponto da Carne",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                {
+                  "name": "Mal Passado",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Ao Ponto",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Bem Passado",
+                  "priceCents": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Teppanyaki de Salmão Fresco",
+          "description": "Filé de salmão grelhado na chapa japonesa teppan com legumes selecionados ao molho teriyaki.",
+          "priceCents": 7800,
+          "modifierGroups": [
+            {
+              "name": "Ponto do Salmão",
+              "minSelectable": 1,
+              "maxSelectable": 1,
+              "isRequired": true,
+              "items": [
+                {
+                  "name": "Ao Ponto Suculento",
+                  "priceCents": 0
+                },
+                {
+                  "name": "Bem Passado",
+                  "priceCents": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bebidas & Sobremesas",
+      "order": 4,
+      "products": [
+        {
+          "name": "Chá Verde Especial Gelado 400ml",
+          "description": "Chá verde japonês orgânico infusionado a frio com folhas de hortelã e limão siciliano.",
+          "priceCents": 1200,
+          "modifierGroups": []
+        },
+        {
+          "name": "Dose de Sakê Premium Silver",
+          "description": "Dose de sakê japonês suave servido no tradicional massu de madeira.",
+          "priceCents": 2600,
+          "modifierGroups": []
+        },
+        {
+          "name": "Tempurá de Sorvete com Calda de Chocolate",
+          "description": "Bola de sorvete de creme crocante por fora e cremosa por dentro, finalizada com calda quente.",
+          "priceCents": 2800,
+          "modifierGroups": []
+        }
+      ]
+    }
+  ]
+}
