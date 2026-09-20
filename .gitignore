@@ -20,6 +20,7 @@ out/
 *.db-journal
 *.db-shm
 *.db-wal
+*.db.backup-*
 *.sqlite
 *.sqlite3
 
@@ -51,4 +52,10 @@ Thumbs.db
 .workbuddy-ai/
 .qa-tmp-*
 apps/api/test-create-food.js
+# Ferramenta local que forja JWT para testar autorização de ponta a ponta.
+# Não deve ser versionada: contém IDs de usuário e um assinador de token.
+apps/api/.rbac-verify.js
+# Estado local de agentes/sessões (inclui IDs de sessão e continuação).
+.omo/
+.opencode/
 
