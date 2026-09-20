@@ -164,6 +164,7 @@ export class DashboardService {
       RESTAURANT: 'Restaurante',
       BARBERSHOP: 'Barbearia',
       SUPERMARKET: 'Supermercado',
+      UNIVERSAL: 'Universal',
     };
 
     const groups = await this.prisma.tenant.groupBy({

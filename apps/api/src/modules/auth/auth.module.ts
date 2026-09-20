@@ -16,7 +16,7 @@ import { resolveJwtSecret } from '../../common/config/jwt-secret';
         // Sem fallback silencioso: em produção, segredo ausente/placeholder
         // impede a inicialização em vez de assinar tokens com valor público.
         secret: resolveJwtSecret(config, 'AuthModule'),
-        signOptions: { expiresIn: config.get('JWT_ACCESS_EXPIRES_IN') || '15m' },
+        signOptions: { expiresIn: config.get('JWT_ACCESS_EXPIRES_IN') || '7d' },
       }),
     }),
   ],

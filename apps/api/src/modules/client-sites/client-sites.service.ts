@@ -31,9 +31,10 @@ const TEMPLATE_BY_NICHE: Record<ClientSiteNiche, string> = {
   RESTAURANT: 'bistro',
   BARBERSHOP: 'studio',
   SUPERMARKET: 'market',
+  UNIVERSAL: 'minimal',
 };
 
-const NICHE_VALUES = new Set<ClientSiteNiche>(['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET']);
+const NICHE_VALUES = new Set<ClientSiteNiche>(['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL']);
 
 function toNiche(value: unknown): ClientSiteNiche {
   if (typeof value === 'string' && NICHE_VALUES.has(value as ClientSiteNiche)) {

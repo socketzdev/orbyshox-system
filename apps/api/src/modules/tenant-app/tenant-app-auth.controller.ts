@@ -17,7 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 const ACCESS_COOKIE = 'ta_access';
 const REFRESH_COOKIE = 'ta_refresh';
-const ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
+const ACCESS_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function stripRefreshToken<T extends Record<string, any>>(result: T) {
@@ -46,11 +46,48 @@ export class TenantAppAuthController {
     });
     res.cookie(REFRESH_COOKIE, result.refreshToken, {
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      path: '/api/v1/tenant-app',
+      path: '/',
       maxAge: REFRESH_COOKIE_MAX_AGE_MS,
     });
+    return stripRefreshToken(result);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('refresh')
+  async refresh(
+    @Req() req: any,
+    @Body() body: { refreshToken?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const rawRefreshToken = req.cookies?.[REFRESH_COOKIE] || body?.refreshToken;
+    if (!rawRefreshToken) {
+      throw new UnauthorizedException('Sessão expirada. Faça login novamente.');
+    }
+
+    const result = await this.tenantAppService.refreshUniversalSession(rawRefreshToken);
+
+    res.cookie(ACCESS_COOKIE, result.accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: ACCESS_COOKIE_MAX_AGE_MS,
+    });
+    // Na janela de tolerância a resposta vem sem refresh novo: nunca escrever
+    // `undefined` no cookie, senão as próximas renovações quebram.
+    if ((result as any).refreshToken) {
+      res.cookie(REFRESH_COOKIE, (result as any).refreshToken, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+      });
+    }
+
     return stripRefreshToken(result);
   }
 
@@ -91,8 +128,17 @@ export class TenantAppAuthController {
 
   @Public()
   @Post('logout')
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: any,
+    @Body() body: { refreshToken?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req?.cookies?.[REFRESH_COOKIE] || body?.refreshToken;
+    if (token) {
+      await this.tenantAppService.logoutUniversalSession(token);
+    }
     res.clearCookie(ACCESS_COOKIE, { path: '/' });
+    res.clearCookie(REFRESH_COOKIE, { path: '/' });
     res.clearCookie(REFRESH_COOKIE, { path: '/api/v1/tenant-app' });
     return { ok: true };
   }

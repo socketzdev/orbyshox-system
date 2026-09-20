@@ -4,10 +4,12 @@ import { ConfigService } from '@nestjs/config';
 import { TenantAppController } from './tenant-app.controller';
 import { TenantAppAuthController } from './tenant-app-auth.controller';
 import { TenantAppService } from './tenant-app.service';
+import { AuditModule } from '../audit/audit.module';
 import { resolveJwtSecret } from '../../common/config/jwt-secret';
 
 @Module({
   imports: [
+    AuditModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

@@ -11,7 +11,11 @@ function extractFromCookieOrHeader(req: Request): string | null {
   if (auth?.startsWith('Bearer ')) return auth.substring(7);
 
   const cookies = (req as any)?.cookies || {};
-  const isTenantApp = (req as any)?.originalUrl?.includes('/tenant-app') || (req as any)?.url?.includes('/tenant-app');
+  const isTenantApp =
+    (req as any)?.originalUrl?.includes('/tenant-app') ||
+    (req as any)?.url?.includes('/tenant-app') ||
+    (req as any)?.originalUrl?.includes('/restaurant') ||
+    (req as any)?.url?.includes('/restaurant');
 
   if (isTenantApp) {
     if (cookies.ta_access) return cookies.ta_access;

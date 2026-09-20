@@ -167,6 +167,7 @@ export class SearchService {
       RESTAURANT: 'Restaurante',
       BARBERSHOP: 'Barbearia',
       SUPERMARKET: 'Supermercado',
+      UNIVERSAL: 'Universal',
     }[niche] || niche;
   }
 

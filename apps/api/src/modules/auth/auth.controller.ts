@@ -16,15 +16,21 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 const ACCESS_COOKIE = 'saas_access';
 const REFRESH_COOKIE = 'saas_refresh';
+// O painel do inquilino (/app) renova a sessão pelos cookies `ta_*`. Como todo
+// mundo entra pela mesma tela de login, o /auth/login também precisa gravá-los
+// quando o usuário pertence a um tenant — sem isso, o refresh do painel falhava
+// sempre e a sessão caía a cada 15 min (o deslogamento em massa).
+const TENANT_ACCESS_COOKIE = 'ta_access';
+const TENANT_REFRESH_COOKIE = 'ta_refresh';
 
 /** Deve espelhar o TTL real do refresh token em `auth.service.ts`. */
-const ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
-const REFRESH_COOKIE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const ACCESS_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Remove o `refreshToken` antes de serializar a resposta.
  *
- * O refresh token é uma credencial de longa duração (14 dias) entregue em
+ * O refresh token é uma credencial de longa duração entregue em
  * cookie `httpOnly`. Devolvê-lo também no corpo JSON tornava o `httpOnly`
  * inútil: qualquer script injetado na página lia a resposta do XHR e obtinha
  * o token. O cookie é o único canal legítimo para o navegador.
@@ -35,7 +41,7 @@ function stripRefreshToken<T extends Record<string, any>>(result: T): Omit<T, 'r
   return safe;
 }
 
-function setAuthCookies(res: Response, accessToken: string, refreshToken?: string) {
+function setAuthCookies(res: Response, accessToken: string, refreshToken?: string, refreshMaxAgeMs: number = REFRESH_COOKIE_MAX_AGE_MS) {
   res.cookie(ACCESS_COOKIE, accessToken, {
     httpOnly: true,
     sameSite: 'lax',
@@ -46,13 +52,25 @@ function setAuthCookies(res: Response, accessToken: string, refreshToken?: strin
   if (refreshToken) {
     res.cookie(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      // O path é restrito às rotas de auth: o cookie não acompanha requisições
-      // para o resto da API, reduzindo a superfície de exposição em CSRF.
-      path: '/api/v1/auth',
-      maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+      path: '/',
+      maxAge: refreshMaxAgeMs,
     });
+  }
+}
+
+/** Espelha os cookies do painel do inquilino para quem tem tenant. */
+function setTenantCookies(res: Response, accessToken: string, refreshToken?: string) {
+  const opts = {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+  };
+  res.cookie(TENANT_ACCESS_COOKIE, accessToken, { ...opts, maxAge: ACCESS_COOKIE_MAX_AGE_MS });
+  if (refreshToken) {
+    res.cookie(TENANT_REFRESH_COOKIE, refreshToken, { ...opts, maxAge: REFRESH_COOKIE_MAX_AGE_MS });
   }
 }
 
@@ -70,7 +88,17 @@ export class AuthController {
       return result;
     }
     if ('accessToken' in result && result.accessToken) {
-      setAuthCookies(res, result.accessToken, (result as any).refreshToken);
+      const rememberMe = (result as any).rememberMe === true;
+      setAuthCookies(
+        res,
+        result.accessToken,
+        (result as any).refreshToken,
+        rememberMe ? REFRESH_COOKIE_MAX_AGE_MS : 14 * 24 * 60 * 60 * 1000,
+      );
+      // Quem tem tenant usa o painel /app, que renova por `ta_*`.
+      if ((result as any)?.user?.tenantId) {
+        setTenantCookies(res, result.accessToken, (result as any).refreshToken);
+      }
     }
     // O refreshToken vai apenas no cookie httpOnly — nunca no corpo.
     // Antes ele era devolvido no JSON, o que anulava o httpOnly: um XSS podia
@@ -104,6 +132,7 @@ export class AuthController {
   async logout(@CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
     if (user?.id) await this.authService.logout(user.id);
     res.clearCookie(ACCESS_COOKIE, { path: '/' });
+    res.clearCookie(REFRESH_COOKIE, { path: '/' });
     res.clearCookie(REFRESH_COOKIE, { path: '/api/v1/auth' });
     return { ok: true };
   }
@@ -125,6 +154,9 @@ export class AuthController {
     const result = await this.authService.verifyTemp2fa(body.tempToken, body.code);
     if (result?.accessToken) {
       setAuthCookies(res, result.accessToken, (result as any).refreshToken);
+      if ((result as any)?.user?.tenantId) {
+        setTenantCookies(res, result.accessToken, (result as any).refreshToken);
+      }
     }
     return stripRefreshToken(result);
   }
@@ -139,6 +171,9 @@ export class AuthController {
     const result = await this.authService.recovery2fa(user.id, code);
     if (result?.accessToken) {
       setAuthCookies(res, result.accessToken, (result as any).refreshToken);
+      if ((result as any)?.user?.tenantId) {
+        setTenantCookies(res, result.accessToken, (result as any).refreshToken);
+      }
     }
     return stripRefreshToken(result);
   }

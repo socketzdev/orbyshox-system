@@ -16,6 +16,12 @@ import { RestaurantService, CreateOrderDto } from './restaurant.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CheckPolicies } from '../../common/decorators/check-policies.decorator';
+import {
+  canCreate,
+  canUpdate,
+  canManage,
+} from '../../common/rbac/policies';
 
 @Controller('restaurant')
 export class RestaurantController {
@@ -38,6 +44,7 @@ export class RestaurantController {
   }
 
   @Post('tables')
+  @CheckPolicies(canManage('Table'))
   async createTable(
     @CurrentUser() user: any,
     @Body() body: { number: number; label?: string; capacity?: number },
@@ -47,6 +54,7 @@ export class RestaurantController {
   }
 
   @Post('tables/batch')
+  @CheckPolicies(canManage('Table'))
   async batchCreateTables(
     @CurrentUser() user: any,
     @Body() body: { count: number; capacity?: number; startNumber?: number },
@@ -56,6 +64,7 @@ export class RestaurantController {
   }
 
   @Post('tables/:id/devices')
+  @CheckPolicies(canManage('Table'))
   async pairDevice(
     @CurrentUser() user: any,
     @Param('id') tableId: string,
@@ -66,22 +75,72 @@ export class RestaurantController {
   }
 
   @Post('tables/:id/rotate-qr')
+  @CheckPolicies(canManage('Table'))
   async rotateQr(@CurrentUser() user: any, @Param('id') tableId: string) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.rotateTableQr(companyId, tableId);
   }
 
+  /**
+   * Fecha a comanda. O `payment` vem do modal de forma de pagamento e é o que
+   * faz a linha "Pagamento" aparecer no cupom — antes o corpo era ignorado e o
+   * recibo saía sem forma de pagamento nenhuma.
+   */
   @Post('tables/:id/close-session')
-  async closeSession(@CurrentUser() user: any, @Param('id') tableId: string) {
+  @CheckPolicies(canUpdate('TableSession'))
+  async closeSession(
+    @CurrentUser() user: any,
+    @Param('id') tableId: string,
+    @Body()
+    body?: {
+      paymentMethod?: string;
+      method?: string;
+      amountReceivedCents?: number;
+      notes?: string;
+      tip?: { paidCents?: number; method?: string };
+    },
+  ) {
     const companyId = this.extractCompanyId(user);
-    return this.restaurantService.closeTableSession(companyId, tableId);
+    return this.restaurantService.closeTableSession(
+      companyId,
+      tableId,
+      {
+        // Aceita as duas grafias: `method` é o nome curto usado pelo modal e
+        // `paymentMethod` é o nome histórico da API.
+        method: body?.method ?? body?.paymentMethod,
+        amountReceivedCents: body?.amountReceivedCents,
+        notes: body?.notes,
+        // 10%: consumo → caixa da empresa, 10% → caixinha separado.
+        tip: body?.tip ? { paidCents: body.tip.paidCents, method: body.tip.method } : undefined,
+      },
+      { id: user?.id || user?.sub, name: user?.name },
+    );
+  }
+
+  /**
+   * Gera a cobrança PIX (BR Code e payload Copia e Cola) para o valor da comanda
+   * em aberto da mesa ou um valor customizado.
+   */
+  @Get('tables/:id/pix-charge')
+  async getTablePixCharge(
+    @CurrentUser() user: any,
+    @Param('id') tableId: string,
+    @Query('amountCents') amountCents?: string,
+  ) {
+    const companyId = this.extractCompanyId(user);
+    return this.restaurantService.getTablePixCharge(
+      companyId,
+      tableId,
+      amountCents ? Number(amountCents) : undefined,
+    );
   }
 
   @Post('tables/:id/open-session')
+  @CheckPolicies(canCreate('TableSession'))
   async openSession(
     @CurrentUser() user: any,
     @Param('id') tableId: string,
-    @Body() body: { customerCount?: number; notes?: string },
+    @Body() body: { customerCount?: number; notes?: string; comandaName?: string; waiterName?: string; waiterId?: string },
   ) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.openTableSession(companyId, tableId, body);
@@ -94,19 +153,27 @@ export class RestaurantController {
   }
 
   @Post('tables/:id/orders')
+  @CheckPolicies(canCreate('Order'))
   async addTableOrder(
     @CurrentUser() user: any,
     @Param('id') tableId: string,
     @Body() orderDto: CreateOrderDto,
   ) {
     const companyId = this.extractCompanyId(user);
+    // Garçom responsável: o front manda `waiterName`/`waiterId`, mas se vier
+    // vazio cai no usuário logado — o KDS e o alerta no celular dependem disso.
+    // O ID é o vínculo confiável (nome pode repetir entre garçons).
+    const waiterName =
+      (orderDto as any)?.waiterName?.trim?.() || user?.name?.trim?.() || null;
+    const waiterId = (orderDto as any)?.waiterId?.trim?.() || user?.id || null;
     return this.restaurantService.createOrder(
       { companyId, tableId },
-      { ...orderDto, origin: 'WAITER' },
+      { ...orderDto, origin: 'WAITER', waiterName, waiterId },
     );
   }
 
   @Post('tables/:id/transfer')
+  @CheckPolicies(canUpdate('TableSession'))
   async transferTable(
     @CurrentUser() user: any,
     @Param('id') fromTableId: string,
@@ -117,6 +184,7 @@ export class RestaurantController {
   }
 
   @Patch('tables/:id')
+  @CheckPolicies(canManage('Table'))
   async updateTable(
     @CurrentUser() user: any,
     @Param('id') tableId: string,
@@ -127,6 +195,7 @@ export class RestaurantController {
   }
 
   @Delete('tables/:id')
+  @CheckPolicies(canManage('Table'))
   async deleteTable(@CurrentUser() user: any, @Param('id') tableId: string) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.deleteTable(companyId, tableId);
@@ -139,29 +208,52 @@ export class RestaurantController {
   }
 
   @Post('products')
+  @CheckPolicies(canCreate('Product'))
   async createProduct(@CurrentUser() user: any, @Body() body: any) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.createProduct(companyId, body);
   }
 
   @Post('categories')
+  @CheckPolicies(canUpdate('Product'))
   async createCategory(@CurrentUser() user: any, @Body() body: any) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.createCategory(companyId, body);
   }
 
+  @Delete('categories/:categoryId')
+  @CheckPolicies(canUpdate('Product'))
+  async deleteCategory(@CurrentUser() user: any, @Param('categoryId') categoryId: string) {
+    const companyId = this.extractCompanyId(user);
+    return this.restaurantService.deleteCategory(companyId, categoryId);
+  }
+
+
+  // Declarado antes de qualquer rota com parâmetro para não ser confundido
+  // com um id de pedido.
+  @Get('orders/stats')
+  async getKitchenStats(@CurrentUser() user: any) {
+    const companyId = this.extractCompanyId(user);
+    return this.restaurantService.getKitchenStats(companyId);
+  }
 
   @Get('orders')
   async listOrders(
     @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('tableId') tableId?: string,
+    @Query('active') active?: string,
   ) {
     const companyId = this.extractCompanyId(user);
-    return this.restaurantService.listOrders(companyId, { status, tableId });
+    return this.restaurantService.listOrders(companyId, {
+      status,
+      tableId,
+      active: active === '1' || active === 'true',
+    });
   }
 
   @Patch('orders/:id/status')
+  @CheckPolicies(canUpdate('Order'))
   async updateOrderStatus(
     @CurrentUser() user: any,
     @Param('id') orderId: string,
@@ -171,13 +263,54 @@ export class RestaurantController {
     return this.restaurantService.updateOrderStatus(companyId, orderId, newStatus);
   }
 
+  @Patch('orders/:id/notes')
+  @CheckPolicies(canUpdate('Order'))
+  async updateOrderNotes(
+    @CurrentUser() user: any,
+    @Param('id') orderId: string,
+    @Body('notes') notes: string,
+  ) {
+    const companyId = this.extractCompanyId(user);
+    return this.restaurantService.updateOrderNotes(companyId, orderId, notes);
+  }
+
+  // ─── Correção de lançamento ───
+  // O garçom não conseguia corrigir um item errado: só dava para cancelar a
+  // comanda toda. Estes dois endpoints permitem ajustar quantidade e remover
+  // item preservando o restante do pedido.
+
+  @Patch('orders/:id/items/:itemId')
+  @CheckPolicies(canUpdate('Order'))
+  async updateOrderItem(
+    @CurrentUser() user: any,
+    @Param('id') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body('quantity') quantity: number,
+  ) {
+    const companyId = this.extractCompanyId(user);
+    return this.restaurantService.updateOrderItem(companyId, orderId, itemId, Number(quantity));
+  }
+
+  @Delete('orders/:id/items/:itemId')
+  @CheckPolicies(canUpdate('Order'))
+  async removeOrderItem(
+    @CurrentUser() user: any,
+    @Param('id') orderId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    const companyId = this.extractCompanyId(user);
+    return this.restaurantService.removeOrderItem(companyId, orderId, itemId);
+  }
+
   @Patch('waiter-calls/:id/answer')
+  @CheckPolicies(canUpdate('WaiterCall'))
   async answerWaiterCall(@CurrentUser() user: any, @Param('id') callId: string) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.answerWaiterCall(companyId, callId);
   }
 
   @Post('waiter-calls/:id/answer')
+  @CheckPolicies(canUpdate('WaiterCall'))
   async answerWaiterCallPost(@CurrentUser() user: any, @Param('id') callId: string) {
     const companyId = this.extractCompanyId(user);
     return this.restaurantService.answerWaiterCall(companyId, callId);

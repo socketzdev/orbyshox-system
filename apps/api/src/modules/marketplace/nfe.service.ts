@@ -55,6 +55,27 @@ export class NfeService {
     return tenant;
   }
 
+  /**
+   * Fator de conversão caixa/fardo → unidade.
+   *
+   * H8: `reconcile` gravava `costPriceCents = vUnCom` (preço da caixa) enquanto
+   * `finalize` gravava `vUnCom / multiplier` (preço da unidade). O mesmo
+   * produto ficava com dois custos diferentes dependendo de qual caminho rodou
+   * por último. Extraído aqui para que os dois usem a mesma regra.
+   */
+  private packMultiplier(product: { packQuantity?: number | null } | null, uCom?: string | null): number {
+    const packFactor = Number(product?.packQuantity) || 1;
+    const isBoxUnit = ['CX', 'FD', 'PCT', 'FARDO', 'CAIXA'].includes(
+      (uCom || '').toUpperCase(),
+    );
+    return isBoxUnit && packFactor > 1 ? packFactor : 1;
+  }
+
+  /** Custo unitário real, já normalizado pela conversão de embalagem. */
+  private unitCostCents(vUnCom: number, multiplier: number): number {
+    return multiplier > 1 ? Math.round(vUnCom / multiplier) : vUnCom;
+  }
+
   parseXml(xmlRaw: string): ParsedNfe {
     if (!xmlRaw || xmlRaw.length < 200) {
       throw new BadRequestException('XML vazio ou muito pequeno');
@@ -131,58 +152,72 @@ export class NfeService {
     const tenant = await this.getTenant(slug);
     const parsed = this.parseXml(xmlRaw);
 
-    const dup = await this.prisma.nfeEntry.findUnique({ where: { accessKey: parsed.accessKey } });
+    // C7: checagem escopada por tenant. Antes era `findUnique({ accessKey })`,
+    // global — o tenant B recebia "já foi importada" para uma nota do tenant A.
+    const dup = await this.prisma.nfeEntry.findFirst({
+      where: { tenantId: tenant.id, accessKey: parsed.accessKey },
+      select: { id: true },
+    });
     if (dup) {
-      throw new BadRequestException(`NF-e ${parsed.accessKey} já foi importada`);
+      throw new BadRequestException('Esta NF-e já foi importada nesta empresa.');
     }
 
-    let supplierId: string | undefined;
-    if (parsed.supplierCnpj) {
-      const existing = await this.prisma.supplier.findFirst({
-        where: { tenantId: tenant.id, cnpj: parsed.supplierCnpj },
-      });
-      if (existing) supplierId = existing.id;
-      else if (parsed.supplierName) {
-        const created = await this.prisma.supplier.create({
-          data: {
-            tenantId: tenant.id,
-            legalName: parsed.supplierName,
-            cnpj: parsed.supplierCnpj,
-            isActive: true,
-          },
+    // H3: fornecedor + NF-e na mesma transação. Antes o fornecedor era criado
+    // fora e, se a NF-e falhasse, ficava órfão no cadastro.
+    const nfe = await this.prisma.$transaction(async (tx) => {
+      let supplierId: string | undefined;
+
+      if (parsed.supplierCnpj) {
+        const existing = await tx.supplier.findFirst({
+          where: { tenantId: tenant.id, cnpj: parsed.supplierCnpj },
+          select: { id: true },
         });
-        supplierId = created.id;
-      }
-    }
 
-    const nfe = await this.prisma.nfeEntry.create({
-      data: {
-        tenantId: tenant.id,
-        supplierId,
-        accessKey: parsed.accessKey,
-        nfeNumber: parsed.nfeNumber,
-        series: parsed.series,
-        issueDate: parsed.issueDate,
-        totalCents: parsed.totalNfe,
-        xmlRaw,
-        status: 'PENDING_RECONCILE',
-        items: {
-          create: parsed.items.map((i) => ({
-            cProd: i.cProd,
-            xProd: i.xProd,
-            ncm: i.ncm,
-            cfop: i.cfop,
-            cEAN: i.cEAN,
-            uCom: i.uCom,
-            qCom: i.qCom,
-            vUnCom: i.vUnCom,
-            vProd: i.vProd,
-            reconciliationType: null,
-            productId: null,
-          })),
+        if (existing) {
+          supplierId = existing.id;
+        } else if (parsed.supplierName) {
+          const created = await tx.supplier.create({
+            data: {
+              tenantId: tenant.id,
+              legalName: parsed.supplierName,
+              cnpj: parsed.supplierCnpj,
+              isActive: true,
+            },
+            select: { id: true },
+          });
+          supplierId = created.id;
+        }
+      }
+
+      return tx.nfeEntry.create({
+        data: {
+          tenantId: tenant.id,
+          supplierId,
+          accessKey: parsed.accessKey,
+          nfeNumber: parsed.nfeNumber,
+          series: parsed.series,
+          issueDate: parsed.issueDate,
+          totalCents: parsed.totalNfe,
+          xmlRaw,
+          status: 'PENDING_RECONCILE',
+          items: {
+            create: parsed.items.map((i) => ({
+              cProd: i.cProd,
+              xProd: i.xProd,
+              ncm: i.ncm,
+              cfop: i.cfop,
+              cEAN: i.cEAN,
+              uCom: i.uCom,
+              qCom: i.qCom,
+              vUnCom: i.vUnCom,
+              vProd: i.vProd,
+              reconciliationType: null,
+              productId: null,
+            })),
+          },
         },
-      },
-      include: { items: true, supplier: true },
+        include: { items: true, supplier: true },
+      });
     });
 
     await this.autoReconcile(tenant.id, nfe.id);
@@ -269,22 +304,45 @@ export class NfeService {
         where: { id: data.productId, tenantId: tenant.id },
       });
       if (!product) throw new NotFoundException('Produto não encontrado');
+
+      // H8: mesmo cálculo de custo usado em `finalize` — antes aqui entrava o
+      // preço da caixa e o produto ficava com custo divergente.
+      const multiplier = this.packMultiplier(product, item.uCom);
       productId = product.id;
       type = 'MANUAL';
       await this.prisma.product.update({
         where: { id: product.id },
-        data: { costPriceCents: item.vUnCom },
+        data: { costPriceCents: this.unitCostCents(item.vUnCom, multiplier) },
       });
     } else if (data.action === 'CREATE_NEW') {
       if (!data.name) throw new BadRequestException('name obrigatório');
+
+      // M3: `Product.barcode` não é único no schema, então um EAN já existente
+      // gerava um produto duplicado em silêncio. Melhor vincular ao existente.
+      const barcode = item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : null;
+      if (barcode) {
+        const alreadyExists = await this.prisma.product.findFirst({
+          where: { tenantId: tenant.id, barcode },
+          select: { id: true },
+        });
+        if (alreadyExists) {
+          throw new BadRequestException(
+            `Já existe um produto com o código de barras ${barcode}. Use "Vincular existente".`,
+          );
+        }
+      }
+
+      const multiplier = this.packMultiplier(null, item.uCom);
+      const costCents = this.unitCostCents(item.vUnCom, multiplier);
+
       const product = await this.prisma.product.create({
         data: {
           tenantId: tenant.id,
           name: data.name,
-          barcode: item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : undefined,
+          barcode: barcode ?? undefined,
           sku: item.cProd || undefined,
-          salePriceCents: Math.round(item.vUnCom * 1.4),
-          costPriceCents: item.vUnCom,
+          salePriceCents: Math.round(costCents * 1.4),
+          costPriceCents: costCents,
           stockQuantity: 0,
           unit: item.uCom || 'UN',
           isActive: true,
@@ -330,18 +388,34 @@ export class NfeService {
       );
     }
 
-    // Parse duplicatas from raw XML if available
+    // H9: antes o parse era envolto em `catch {}` silencioso e, na falha, uma
+    // conta a pagar era criada com vencimento chutado em 30 dias. Um erro de
+    // leitura não pode virar lançamento financeiro inventado — agora falha.
     let parsedDups: ParsedNfeDup[] = [];
     if (nfe.xmlRaw) {
-      try {
-        const parsed = this.parseXml(nfe.xmlRaw);
-        parsedDups = parsed.duplicatas;
-      } catch {
-        // Fallback if raw XML parsing fails
-      }
+      const parsed = this.parseXml(nfe.xmlRaw);
+      parsedDups = parsed.duplicatas;
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // C6: a guarda de idempotência precisa ser ATÔMICA. Antes ficava fora da
+      // transação (`if (nfe.status === 'STOCKED') return`), então duas chamadas
+      // concorrentes passavam ambas e lançavam estoque em dobro, além de criar
+      // contas a pagar duplicadas. Este updateMany condicional é a trava: só
+      // uma chamada consegue mudar o status para STOCKED.
+      const claimed = await tx.nfeEntry.updateMany({
+        where: { id, tenantId: tenant.id, status: { not: 'STOCKED' } },
+        data: { status: 'STOCKED' },
+      });
+
+      if (claimed.count === 0) {
+        // Outra chamada efetivou primeiro — devolve o estado atual sem relançar.
+        return tx.nfeEntry.findUniqueOrThrow({
+          where: { id },
+          include: { items: { include: { product: true } } },
+        });
+      }
+
       // 1. Processar itens de estoque e Kardex
       for (const item of nfe.items) {
         if (!item.productId) continue;
@@ -351,11 +425,18 @@ export class NfeService {
         });
         if (!product) continue;
 
-        // Fator de conversão (fardo/caixa vs unidade)
-        const packFactor = (product as any).packQuantity || 1;
-        const isBoxUnit = ['CX', 'FD', 'PCT', 'FARDO', 'CAIXA'].includes((item.uCom || '').toUpperCase());
-        const multiplier = isBoxUnit && packFactor > 1 ? packFactor : 1;
+        // Fator de conversão (fardo/caixa vs unidade) — mesma regra do reconcile
+        const multiplier = this.packMultiplier(product, item.uCom);
         const totalQuantityToAdd = item.qCom * multiplier;
+
+        // M1: quantidade não positiva gera lote e saldo negativos.
+        if (!(totalQuantityToAdd > 0)) {
+          throw new BadRequestException(
+            `Quantidade inválida no item "${item.xProd}" (${item.qCom} ${item.uCom}).`,
+          );
+        }
+
+        const costCents = this.unitCostCents(item.vUnCom, multiplier);
 
         // Criar lote
         await tx.stockBatch.create({
@@ -364,7 +445,7 @@ export class NfeService {
             productId: item.productId,
             lotNumber: `${nfe.series}-${nfe.nfeNumber}-${item.cProd}`.slice(0, 32),
             quantity: totalQuantityToAdd,
-            costCents: Math.round(item.vUnCom / multiplier),
+            costCents,
             nfeEntryId: nfe.id,
             status: 'ACTIVE',
           },
@@ -375,7 +456,7 @@ export class NfeService {
           where: { id: item.productId },
           data: {
             stockQuantity: { increment: totalQuantityToAdd },
-            costPriceCents: Math.round(item.vUnCom / multiplier),
+            costPriceCents: costCents,
           },
         });
 
@@ -425,10 +506,10 @@ export class NfeService {
         });
       }
 
-      // 3. Atualizar status da nota para STOCKED
-      return tx.nfeEntry.update({
+      // 3. Status já foi reivindicado como STOCKED no início da transação;
+      // aqui apenas devolvemos o estado final consistente.
+      return tx.nfeEntry.findUniqueOrThrow({
         where: { id },
-        data: { status: 'STOCKED' },
         include: { items: { include: { product: true } } },
       });
     });

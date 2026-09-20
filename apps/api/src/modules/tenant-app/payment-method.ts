@@ -55,6 +55,33 @@ const ALIASES: Record<string, PaymentMethod> = {
 };
 
 /**
+ * Chave de consulta: sem acento, maiúscula, espaços/hífens viram `_`
+ * ("Cartão de Débito" → `CARTAO_DE_DEBITO`).
+ */
+function baseKey(value: string): string {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+/**
+ * Variações consultadas em ordem: a chave cheia e, se ela tiver conectivos
+ * ("DE"/"DA"/"DO"), a forma sem eles (`CARTAO_DE_DEBITO` → `CARTAO_DEBITO`).
+ * Sem isso, "Cartão de Débito" digitado por extenso nunca bateria em alias
+ * nenhum e cairia em OUTROS/DINHEIRO.
+ */
+function lookupAlias(raw: string): PaymentMethod | null {
+  const full = baseKey(raw);
+  if (ALIASES[full]) return ALIASES[full];
+  const short = full.replace(/_D[AEO]_/g, '_');
+  if (ALIASES[short]) return ALIASES[short];
+  return null;
+}
+
+/**
  * Converte qualquer variante conhecida no valor canônico.
  * Valores desconhecidos caem no `fallback` em vez de poluírem o relatório
  * com uma categoria nova a cada digitação errada.
@@ -64,8 +91,41 @@ export function normalizePaymentMethod(
   fallback: PaymentMethod = DEFAULT_PAYMENT_METHOD,
 ): PaymentMethod {
   if (!value) return fallback;
-  const key = String(value).trim().toUpperCase().replace(/[\s-]+/g, '_');
-  return ALIASES[key] ?? fallback;
+  return lookupAlias(String(value)) ?? fallback;
+}
+
+/**
+ * Variante para consolidação (fechamento do dia): desconhecido vira `OUTROS`
+ * em vez de cair em DINHEIRO — somar valor sem dono no dinheiro quebraria a
+ * prestação de contas com o proprietário.
+ */
+export type ConsolidatedPaymentMethod = PaymentMethod | 'OUTROS';
+
+export function normalizePaymentMethodOrOther(
+  value: string | null | undefined,
+): ConsolidatedPaymentMethod {
+  if (!value || !String(value).trim()) return 'OUTROS';
+  return lookupAlias(String(value)) ?? 'OUTROS';
+}
+
+/** Rótulo em português para o cupom/relatório térmico. */
+export function paymentMethodLabel(method: string): string {
+  switch (method) {
+    case 'DINHEIRO':
+      return 'Dinheiro';
+    case 'PIX':
+      return 'Pix';
+    case 'CARTAO_CREDITO':
+      return 'Cartão de Crédito';
+    case 'CARTAO_DEBITO':
+      return 'Cartão de Débito';
+    case 'VALE':
+      return 'Vale';
+    case 'FIADO':
+      return 'Fiado';
+    default:
+      return 'Outros';
+  }
 }
 
 /** Venda a prazo (gera dívida do cliente). */

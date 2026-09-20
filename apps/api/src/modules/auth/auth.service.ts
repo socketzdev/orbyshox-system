@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { authenticator } from 'otplib';
 import * as crypto from 'crypto';
+import { isBenignRotationReuse } from '../../common/guards/refresh-grace';
 
 @Injectable()
 export class AuthService {
@@ -40,6 +41,7 @@ export class AuthService {
         name: true,
         role: true,
         phone: true,
+        position: true,
         tenantId: true,
         companyId: true,
         isActive: true,
@@ -85,7 +87,6 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Credenciais inválidas');
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-
     if (user.is2faEnabled) {
       // TTL curto e explícito: este token é uma passagem de mão única para
       // concluir o 2FA, não uma sessão. Os 15 min herdados do módulo eram uma
@@ -98,15 +99,25 @@ export class AuthService {
     }
 
     const accessToken = await this.generateAccessToken(user);
-    const { token: refreshToken } = await this.generateRefreshToken(user.id);
+    // "Lembrar por 30 dias": refresh de 30 dias; sem marcar, 14 dias. Antes o
+    // checkbox era decorativo e todo mundo caía em 14 dias.
+    const rememberMe = loginDto?.rememberMe === true;
+    const { token: refreshToken } = await this.generateRefreshToken(
+      user.id,
+      undefined,
+      rememberMe ? 30 : 14,
+    );
     return {
       accessToken,
       refreshToken,
+      rememberMe,
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
+        position: user.position,
         tenantId: user.tenantId,
         companyId: user.companyId,
         tenant: user.tenant
@@ -152,8 +163,16 @@ export class AuthService {
     }
     if (!hashMatches) throw new UnauthorizedException('Refresh token inválido');
 
-    // Reuso de token já rotacionado: revoga a família inteira (possível roubo).
+    // Reuso de token já rotacionado: pode ser roubo — MAS também pode ser
+    // corrida legítima entre abas/dispositivos (polling simultâneo). Reuso
+    // dentro da janela de tolerância, com sucessor, ganha um access novo sem
+    // matar a família. Fora disso, revoga tudo como antes.
     if (candidate.revokedAt) {
+      if (isBenignRotationReuse(candidate.revokedAt, (candidate as any).replacedByTokenId)) {
+        const graceUser = await this.prisma.user.findUnique({ where: { id: candidate.userId } });
+        if (!graceUser || !graceUser.isActive) throw new UnauthorizedException();
+        return { accessToken: await this.generateAccessToken(graceUser) };
+      }
       await this.prisma.refreshToken.updateMany({
         where: { familyId: candidate.familyId },
         data: { revokedAt: new Date() },
@@ -306,7 +325,7 @@ export class AuthService {
 
     const accessToken = await this.generateAccessToken(user, true);
     const { token: refreshToken } = await this.generateRefreshToken(user.id);
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, user: { tenantId: (user as any).tenantId ?? null } };
   }
 
   private async generateAccessToken(user: any, is2faAuthenticated: boolean = false) {
@@ -315,6 +334,8 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      position: user.position || null,
+      phone: user.phone || null,
       tenantId: user.tenantId,
       tenantSlug: user.tenant?.slug || null,
       companyId: user.companyId || user.tenantId || null,
@@ -323,7 +344,7 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
-  private async generateRefreshToken(userId: string, existingFamilyId?: string) {
+  private async generateRefreshToken(userId: string, existingFamilyId?: string, ttlDays = 14) {
     const familyId = existingFamilyId || crypto.randomUUID();
     const secret = crypto.randomBytes(48).toString('hex');
     const tokenHash = await argon2.hash(secret);
@@ -338,7 +359,7 @@ export class AuthService {
         userId,
         tokenHash,
         familyId,
-        expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000),
       },
     });
 

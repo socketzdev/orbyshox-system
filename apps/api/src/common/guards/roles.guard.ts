@@ -6,35 +6,23 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { PLATFORM_ROLES as CANONICAL_PLATFORM_ROLES, type PlatformRole } from '../rbac/roles';
 
 /**
- * Papéis REAIS do painel administrativo.
+ * Papéis do painel administrativo (plataforma + admin do cliente).
  *
- * Fonte da verdade: os valores efetivamente gravados em `User.role`
- * (confirmado por `groupBy role` no banco e pelo `seed.ts`). Note que a
- * nomenclatura diverge do que `staff.service.ts` validava antes
- * (`ADMIN`/`SUPPORT`/`VIEWER`), que NÃO existem em uso — teria bloqueado
- * todos os operadores reais.
+ * Fonte da verdade: `common/rbac/roles.ts`. As listas estavam duplicadas aqui
+ * e divergiam do que existe em `User.role` — a validação anterior aceitava
+ * `ADMIN`/`SUPPORT`/`VIEWER`, que não existem em uso e teriam bloqueado todos
+ * os operadores reais. Centralizar evita que a divergência volte.
  *
  * `TENANT_ADMIN` é o administrador de uma empresa cliente: tem poder total
  * dentro do próprio tenant, mas nenhum acesso a rotas de plataforma.
  */
-export type AdminRole =
-  | 'SUPER_ADMIN'
-  | 'SUPPORT_MANAGER'
-  | 'SUPPORT_AGENT'
-  | 'FINANCE'
-  | 'DEV'
-  | 'TENANT_ADMIN';
+export type AdminRole = PlatformRole | 'TENANT_ADMIN';
 
 /** Papéis com acesso ao painel de plataforma (equipe interna). */
-export const PLATFORM_ROLES: AdminRole[] = [
-  'SUPER_ADMIN',
-  'SUPPORT_MANAGER',
-  'SUPPORT_AGENT',
-  'FINANCE',
-  'DEV',
-];
+export const PLATFORM_ROLES: AdminRole[] = [...CANONICAL_PLATFORM_ROLES];
 
 /** Papéis que podem executar operações destrutivas/de alto privilégio. */
 export const ADMIN_ROLES: AdminRole[] = ['SUPER_ADMIN', 'DEV'];
