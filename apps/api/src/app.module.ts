@@ -5,11 +5,14 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { ImpersonationInterceptor } from './common/interceptors/impersonation.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PoliciesGuard } from './common/guards/policies.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TwoFactorGuard } from './common/guards/two-factor.guard';
 
 import { DatabaseModule } from './modules/database/database.module';
+import { RbacModule } from './common/rbac/rbac.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { PlansModule } from './modules/plans/plans.module';
@@ -26,6 +29,10 @@ import { SearchModule } from './modules/search/search.module';
 import { TenantAppModule } from './modules/tenant-app/tenant-app.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { RestaurantModule } from './modules/restaurant/restaurant.module';
+import { AiModule } from './modules/ai/ai.module';
+import { TasksModule } from './modules/tasks/tasks.module';
+import { GymModule } from './modules/gym/gym.module';
+import { ServiceOrdersModule } from './modules/service-orders/service-orders.module';
 
 const hasRedis = process.env.REDIS_ENABLED === 'true';
 
@@ -59,6 +66,7 @@ const hasRedis = process.env.REDIS_ENABLED === 'true';
         ]
       : []),
     DatabaseModule,
+    RbacModule,
     AuthModule,
     TenantsModule,
     PlansModule,
@@ -77,14 +85,28 @@ const hasRedis = process.env.REDIS_ENABLED === 'true';
     TenantAppModule,
     MarketplaceModule,
     RestaurantModule,
+    AiModule,
+    TasksModule,
+    GymModule,
+    ServiceOrdersModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    // Suporte cross-tenant: roda depois da auditoria e antes dos handlers,
+    // ajustando o contexto (empresa) quando o Super Admin visualiza outra
+    // empresa. Sem o cabeçalho ou sem o papel, não faz nada.
+    { provide: APP_INTERCEPTOR, useClass: ImpersonationInterceptor },
     // ThrottlerModule já estava configurado mas o guard nunca era registrado,
     // deixando o rate limit global inativo. Roda antes dos demais para limitar
     // também tentativas de login/refresh (rotas @Public).
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // RBAC do tenant e da plataforma. Depende de `request.user` (JwtAuthGuard
+    // acima) e roda ANTES do RolesGuard porque é o checador granular: o
+    // RolesGuard só sabe comparar papéis, o PoliciesGuard decide por
+    // (ação × sujeito). Estava implementado desde o início mas nunca
+    // registrado — os `@CheckPolicies` eram metadata inerte (achado H10).
+    { provide: APP_GUARD, useClass: PoliciesGuard },
     // Aplica os @Roles(...) declarados nos controllers. Sem este registro os
     // decoradores seriam metadata inerte e as rotas ficariam sem checagem.
     { provide: APP_GUARD, useClass: RolesGuard },
