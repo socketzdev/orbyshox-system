@@ -163,8 +163,12 @@ export type UpsertBarberProfileInput = z.infer<typeof upsertBarberProfileSchema>
 
 // ─── Tenant Employee (Funcionários do Painel do Cliente) ─────────────────────
 
-export const EMPLOYEE_ROLES = ['TENANT_ADMIN', 'TENANT_EMPLOYEE', 'STORE_MANAGER', 'CASHIER', 'STOCKIST'] as const;
+export const EMPLOYEE_ROLES = ['TENANT_ADMIN', 'TENANT_EMPLOYEE', 'STORE_MANAGER', 'CASHIER', 'STOCKIST', 'WAITER', 'KITCHEN', 'CLEANING'] as const;
 export type EmployeeRoleType = (typeof EMPLOYEE_ROLES)[number];
+
+// Acúmulos de função (ex.: garçom que também faz limpeza). Vão em `User.tags`
+// (JSON) e somam permissões sem trocar o cargo principal.
+export const EMPLOYEE_TAGS = ['CLEANING'] as const;
 
 export const createEmployeeSchema = z.object({
   name: z.string().trim().min(2, 'Informe o nome do funcionário'),
@@ -173,6 +177,7 @@ export const createEmployeeSchema = z.object({
   role: z.enum(EMPLOYEE_ROLES).default('TENANT_EMPLOYEE'),
   phone: z.string().trim().optional(),
   position: z.string().trim().optional(),
+  tags: z.array(z.enum(EMPLOYEE_TAGS)).max(5).default([]).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -183,6 +188,7 @@ export const updateEmployeeSchema = z.object({
   role: z.enum(EMPLOYEE_ROLES).optional(),
   phone: z.string().trim().optional().nullable(),
   position: z.string().trim().optional().nullable(),
+  tags: z.array(z.enum(EMPLOYEE_TAGS)).max(5).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -259,10 +265,10 @@ export const managerAuthorizeSchema = z.object({
 
 export const NICHE_DEFAULT_CATEGORIES: Record<string, Array<{ name: string; color: string }>> = {
   RESTAURANT: [
-    { name: 'Pães & Salgados', color: '#f59e0b' },
-    { name: 'Cafés & Bebidas', color: '#3b82f6' },
-    { name: 'Doces & Confeitaria', color: '#ec4899' },
-    { name: 'Lanches & Pratos', color: '#10b981' },
+    { name: 'Pratos Principais', color: '#f59e0b' },
+    { name: 'Entradas & Porções', color: '#10b981' },
+    { name: 'Bebidas & Sucos', color: '#3b82f6' },
+    { name: 'Sobremesas da Casa', color: '#ec4899' },
   ],
   BARBERSHOP: [
     { name: 'Cortes & Cabelo', color: '#6366f1' },
@@ -276,16 +282,33 @@ export const NICHE_DEFAULT_CATEGORIES: Record<string, Array<{ name: string; colo
     { name: 'Bebidas & Mercearia', color: '#3b82f6' },
     { name: 'Higiene & Limpeza', color: '#06b6d4' },
   ],
+  LOJA_ROUPA: [
+    { name: 'Masculino', color: '#3b82f6' },
+    { name: 'Feminino', color: '#ec4899' },
+    { name: 'Infantil', color: '#10b981' },
+    { name: 'Calçados & Acessórios', color: '#f59e0b' },
+  ],
+  ACADEMIA: [
+    { name: 'Planos & Mensalidades', color: '#f97316' },
+    { name: 'Suplementos', color: '#10b981' },
+    { name: 'Bebidas & Hidratação', color: '#3b82f6' },
+    { name: 'Roupas & Acessórios', color: '#8b5cf6' },
+  ],
+  UNIVERSAL: [
+    { name: 'Produtos', color: '#10b981' },
+    { name: 'Serviços', color: '#6366f1' },
+    { name: 'Bebidas & Conveniência', color: '#3b82f6' },
+    { name: 'Promoções', color: '#f59e0b' },
+  ],
 };
 
 export const NICHE_DEFAULT_PRODUCTS: Record<string, Array<{ name: string; categoryIndex: number; priceCents: number; unit: string }>> = {
   RESTAURANT: [
-    { name: 'Pão Francês (kg)', categoryIndex: 0, priceCents: 1890, unit: 'KG' },
-    { name: 'Pão de Queijo Tradicional', categoryIndex: 0, priceCents: 500, unit: 'UN' },
-    { name: 'Café Expresso Especial', categoryIndex: 1, priceCents: 650, unit: 'UN' },
-    { name: 'Suco Natural de Laranja 400ml', categoryIndex: 1, priceCents: 1100, unit: 'UN' },
-    { name: 'Bolo de Cenoura com Chocolate (fatia)', categoryIndex: 2, priceCents: 950, unit: 'UN' },
-    { name: 'Misto Quente na Chapa', categoryIndex: 3, priceCents: 1400, unit: 'UN' },
+    { name: 'Prato Executivo Especial da Casa', categoryIndex: 0, priceCents: 3800, unit: 'UN' },
+    { name: 'Porção de Batata Rústica com Alecrim', categoryIndex: 1, priceCents: 2400, unit: 'UN' },
+    { name: 'Suco Natural de Laranja 400ml', categoryIndex: 2, priceCents: 1000, unit: 'UN' },
+    { name: 'Refrigerante em Lata 350ml', categoryIndex: 2, priceCents: 700, unit: 'UN' },
+    { name: 'Sobremesa Artesanal (Pudim da Casa)', categoryIndex: 3, priceCents: 1600, unit: 'UN' },
   ],
   BARBERSHOP: [
     { name: 'Corte Degradê / Moderno', categoryIndex: 0, priceCents: 4500, unit: 'UN' },
@@ -299,6 +322,97 @@ export const NICHE_DEFAULT_PRODUCTS: Record<string, Array<{ name: string; catego
     { name: 'Arroz Tipo 1 - 5kg', categoryIndex: 2, priceCents: 2790, unit: 'UN' },
     { name: 'Detergente Líquido 500ml', categoryIndex: 3, priceCents: 289, unit: 'UN' },
   ],
+  LOJA_ROUPA: [
+    { name: 'Camiseta Básica', categoryIndex: 0, priceCents: 4990, unit: 'UN' },
+    { name: 'Calça Jeans', categoryIndex: 0, priceCents: 12990, unit: 'UN' },
+    { name: 'Vestido Estampado', categoryIndex: 1, priceCents: 9990, unit: 'UN' },
+    { name: 'Tênis Casual', categoryIndex: 3, priceCents: 19990, unit: 'PAR' },
+  ],
+  ACADEMIA: [
+    { name: 'Plano Mensal Musculação', categoryIndex: 0, priceCents: 9990, unit: 'UN' },
+    { name: 'Whey Protein 900g', categoryIndex: 1, priceCents: 14990, unit: 'UN' },
+    { name: 'Garrafa de Água 500ml', categoryIndex: 2, priceCents: 500, unit: 'UN' },
+    { name: 'Camiseta Dry-Fit da Academia', categoryIndex: 3, priceCents: 7990, unit: 'UN' },
+  ],
+  UNIVERSAL: [
+    { name: 'Produto Destaque da Casa', categoryIndex: 0, priceCents: 2990, unit: 'UN' },
+    { name: 'Serviço Padrão (30 min)', categoryIndex: 1, priceCents: 5000, unit: 'UN' },
+    { name: 'Bebida Gelada 350ml', categoryIndex: 2, priceCents: 700, unit: 'UN' },
+    { name: 'Oferta da Semana', categoryIndex: 3, priceCents: 1990, unit: 'UN' },
+  ],
+};
+
+// ─── Sub-templates da Barbearia ──────────────────────────────────────────
+// Cada vertical reutiliza módulos existentes (nada é recriado): a lista de
+// `features` dirige menus, agenda e relatórios; `dashboard` diz qual painel
+// abrir ('barber' = nativo da barbearia, 'generic' = neutro).
+
+export interface BarbershopTemplate {
+  key: string;
+  label: string;
+  shortLabel: string;
+  description: string;
+  features: string[];
+  dashboard: 'barber' | 'generic';
+}
+
+export const BARBERSHOP_TEMPLATES: Record<string, BarbershopTemplate> = {
+  BARBEARIA: {
+    key: 'BARBEARIA',
+    label: 'Barbearia',
+    shortLabel: 'Barbearia',
+    description: 'Template nativo: agenda, profissionais, comissões e PDV.',
+    features: ['appointments', 'barbers', 'services', 'loyalty', 'pos', 'finance', 'stock', 'automations'],
+    dashboard: 'barber',
+  },
+  SALAO_FEMININO: {
+    key: 'SALAO_FEMININO',
+    label: 'Salão Feminino',
+    shortLabel: 'Salão',
+    description: 'Cabeleireiros, manicures, esteticistas, agenda, comissões e vendas.',
+    features: ['appointments', 'barbers', 'team', 'products', 'stock', 'pos', 'finance', 'reports', 'customers', 'settings', 'automations'],
+    dashboard: 'barber',
+  },
+  REFRIGERACAO: {
+    key: 'REFRIGERACAO',
+    label: 'Refrigeração Residencial',
+    shortLabel: 'Refrigeração',
+    description: 'Instalação e manutenção de ar-condicionado: visitas, ordens de serviço e peças.',
+    features: ['service', 'customers', 'team', 'products', 'stock', 'appointments', 'tasks', 'finance', 'reports', 'settings'],
+    dashboard: 'generic',
+  },
+  GRAFICA: {
+    key: 'GRAFICA',
+    label: 'Gráfica / Design',
+    shortLabel: 'Gráfica',
+    description: 'Projetos, artes, produção, prazos e entregas.',
+    features: ['customers', 'team', 'tasks', 'appointments', 'products', 'stock', 'finance', 'reports', 'settings'],
+    dashboard: 'generic',
+  },
+  INTERNET: {
+    key: 'INTERNET',
+    label: 'Empresa de Internet',
+    shortLabel: 'Internet',
+    description: 'Planos, instalações, suporte, cobranças e inadimplência.',
+    features: ['customers', 'team', 'finance', 'tasks', 'appointments', 'products', 'stock', 'reports', 'settings'],
+    dashboard: 'generic',
+  },
+  LOJA_ROUPA: {
+    key: 'LOJA_ROUPA',
+    label: 'Loja de Roupa',
+    shortLabel: 'Loja',
+    description: 'Catálogo com grade de tamanhos e cores, estoque, PDV e financeiro.',
+    features: ['customers', 'team', 'products', 'stock', 'pos', 'finance', 'reports', 'settings'],
+    dashboard: 'generic',
+  },
+  ACADEMIA: {
+    key: 'ACADEMIA',
+    label: 'Academia',
+    shortLabel: 'Academia',
+    description: 'Gestão fitness: alunos, matrículas, check-in, treinos, aulas coletivas e financeiro.',
+    features: ['gym', 'team', 'products', 'stock', 'pos', 'finance', 'reports', 'settings'],
+    dashboard: 'generic',
+  },
 };
 
 // ─── Notas de Compra ─────────────────────────────────────────────────────────

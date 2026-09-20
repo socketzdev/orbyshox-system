@@ -15,10 +15,27 @@ export const TENANT_NICHE = {
   RESTAURANT: 'RESTAURANT',
   BARBERSHOP: 'BARBERSHOP',
   SUPERMARKET: 'SUPERMARKET',
+  UNIVERSAL: 'UNIVERSAL',
 } as const;
 export type TenantNiche = (typeof TENANT_NICHE)[keyof typeof TENANT_NICHE];
 
-export const TENANT_NICHE_VALUES = ['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET'] as const;
+export const TENANT_NICHE_VALUES = ['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL'] as const;
+
+// ─── Sub-templates da Barbearia ──────────────────────────────────────────
+// Barbearia usa o template nativo (estrutura intocada); os demais adaptam
+// módulos existentes (agenda, equipe, finanças, estoque, tarefas).
+// ACADEMIA é a vertical de gestão fitness (alunos, matrículas, check-in,
+// treinos, aulas coletivas) com dados próprios.
+export const BARBERSHOP_CATEGORY_VALUES = [
+  'BARBEARIA',
+  'SALAO_FEMININO',
+  'REFRIGERACAO',
+  'GRAFICA',
+  'INTERNET',
+  'LOJA_ROUPA',
+  'ACADEMIA',
+] as const;
+export type BarbershopCategory = (typeof BARBERSHOP_CATEGORY_VALUES)[number];
 
 // ─── User Roles ─────────────────────────────────────────────────────────────
 

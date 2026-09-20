@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TENANT_NICHE, TENANT_NICHE_VALUES, TENANT_STATUS, TENANT_STATUS_VALUES, RESTAURANT_CATEGORY_VALUES } from './enums';
+import { TENANT_NICHE, TENANT_NICHE_VALUES, TENANT_STATUS, TENANT_STATUS_VALUES, RESTAURANT_CATEGORY_VALUES, BARBERSHOP_CATEGORY_VALUES } from './enums';
 
 // ─── Tenant Schemas ─────────────────────────────────────────────────────────
 
@@ -19,7 +19,11 @@ export const createTenantSchema = z.object({
   logo: z.string().optional(),
   primaryColor: z.string().optional(),
   restaurantCategory: z.enum(RESTAURANT_CATEGORY_VALUES).optional(),
+  barbershopCategory: z.enum(BARBERSHOP_CATEGORY_VALUES).optional(),
   tableCount: z.coerce.number().min(0).max(100).default(0).optional(),
+  enableQrCode: z.boolean().default(true).optional(),
+  enableTablet: z.boolean().default(true).optional(),
+  enableWaiterCall: z.boolean().default(true).optional(),
   features: z.array(z.string()).optional(),
   planId: z.string().optional(),
   trialDays: z.number().min(1).max(90).optional(),

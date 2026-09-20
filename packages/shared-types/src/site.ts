@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const CLIENT_SITE_NICHES = ['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET'] as const;
+export const CLIENT_SITE_NICHES = ['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL'] as const;
 export type ClientSiteNiche = (typeof CLIENT_SITE_NICHES)[number];
 
 // These paths belong to the platform itself and cannot be claimed by a tenant.
@@ -162,6 +162,21 @@ export const DEFAULT_SITE_CONTENT_BY_NICHE: Record<ClientSiteNiche, SiteContent>
     phone: '(11) 99999-0000',
     instagram: '@suaempresa',
   },
+  UNIVERSAL: {
+    heroTitle: 'Tudo que o seu negócio precisa',
+    heroSubtitle: 'Vendas, estoque, equipe e financeiro em um só lugar.',
+    ctaLabel: 'Conhecer a empresa',
+    servicesTitle: 'O que oferecemos',
+    services: [
+      { name: 'Produtos & Serviços', description: 'Catálogo completo com preços atualizados.', price: 'Consulte' },
+      { name: 'Atendimento ágil', description: 'Compra rápida no balcão ou com entrega.', price: 'Fale com a gente' },
+      { name: 'Ofertas da semana', description: 'Novidades e condições especiais.', price: 'Confira' },
+    ],
+    address: 'Rua Central, 100 · Centro',
+    openingHours: 'Segunda a sábado · 8h às 20h',
+    phone: '(11) 99999-0000',
+    instagram: '@suaempresa',
+  },
 };
 
 export const SITE_TEMPLATE_CATALOG = [
@@ -185,7 +200,7 @@ export const SITE_TEMPLATE_CATALOG = [
     key: 'market',
     name: 'Market Fresh',
     description: 'Grade objetiva para ofertas, categorias e conveniência.',
-    niches: ['SUPERMARKET'] as ClientSiteNiche[],
+    niches: ['SUPERMARKET', 'UNIVERSAL'] as ClientSiteNiche[],
     preview: 'fresh',
     defaultPrimary: '#16a34a',
   },

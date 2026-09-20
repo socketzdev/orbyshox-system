@@ -13,7 +13,7 @@ export const registerSchema = z.object({
   password: z.string().min(8, 'A senha deve ter no mínimo 8 caracteres'),
   companyName: z.string().trim().min(2, 'Informe o nome da empresa'),
   tradeName: z.string().trim().optional(),
-  niche: z.enum(['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET']),
+  niche: z.enum(['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL']),
   slug: z
     .string()
     .trim()

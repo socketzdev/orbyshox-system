@@ -57,7 +57,20 @@ export class TenantsService {
       this.prisma.tenant.count({ where }),
     ]);
 
-    return { data, meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / limit) } };
+    // Categoria da Company (sub-template: salão, refrigeração...) para o selo
+    // de segmento do painel — Company tem o mesmo id do Tenant.
+    const ids = data.map((t) => t.id);
+    const companies =
+      ids.length > 0
+        ? await this.prisma.company.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, category: true },
+          })
+        : [];
+    const categoryById = new Map(companies.map((c) => [c.id, c.category]));
+    const withCategory = data.map((t) => ({ ...t, companyCategory: categoryById.get(t.id) || null }));
+
+    return { data: withCategory, meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / limit) } };
   }
 
   async findOne(id: string) {
@@ -71,7 +84,11 @@ export class TenantsService {
       },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
-    return tenant;
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      select: { category: true },
+    });
+    return { ...tenant, companyCategory: company?.category || null };
   }
 
   async validatePhone(phoneRaw: string, actor?: any) {
@@ -195,6 +212,20 @@ export class TenantsService {
       throw new ConflictException(`O CNPJ "${input.cnpj}" já está cadastrado`);
     }
 
+    // Blindagem do Super Admin: a conta de suporte NUNCA pode ser convertida
+    // em admin de empresa (isso trocava tenantId/senha do criador e o
+    // derrubava da sessão). Quem cria informa outro e-mail/telefone.
+    if (existingUserByEmail?.role === 'SUPER_ADMIN') {
+      throw new ConflictException(
+        'Este e-mail pertence ao Super Administrador. Informe outro e-mail para o administrador da empresa.',
+      );
+    }
+    if (existingUserByPhone?.role === 'SUPER_ADMIN') {
+      throw new ConflictException(
+        'Este telefone pertence ao Super Administrador. Informe outro número para o administrador da empresa.',
+      );
+    }
+
     // Se o telefone já existe e NÃO pertence ao Super Admin ou a um usuário sem tenant:
     if (existingUserByPhone) {
       const isSuperAdminOrOrphan =
@@ -251,19 +282,26 @@ export class TenantsService {
 
         // Criar a Company (limite interno do tenant no Restaurant OS)
         const restCat = (input as any).restaurantCategory || 'BURGER_HOUSE';
+        // Sub-template da barbearia (Barbearia nativa; demais viram categoria
+        // da Company e dirigem menus, selos e agenda — sem recriar estrutura).
+        const barbCat = (input as any).barbershopCategory || 'BARBEARIA';
+        const companyCategory = input.niche === 'BARBERSHOP' ? barbCat : restCat;
         const company = await tx.company.create({
           data: {
             id: tenant.id,
             name: input.companyName,
             slug,
             cnpj: input.cnpj || null,
-            category: restCat,
+            category: companyCategory,
             plan: 'PRO',
             active: true,
             branding: JSON.stringify({
               primaryColor: (input as any).primaryColor || '#E63946',
               logoUrl: (input as any).logo || null,
-              setupCompleted: false,
+              setupCompleted: true,
+              enableQrCode: (input as any).enableQrCode !== false,
+              enableTablet: (input as any).enableTablet !== false,
+              enableWaiterCall: (input as any).enableWaiterCall !== false,
             }),
           },
         });
@@ -332,6 +370,7 @@ export class TenantsService {
 
       // Gerar as N Mesas com Tokens Opacos e Hashes Seguros (se tableCount > 0)
       const tableCount = Number((input as any).tableCount) || 0;
+      const enableTablet = (input as any).enableTablet !== false;
       const createdTablesWithTokens = [];
 
       for (let i = 1; i <= tableCount; i++) {
@@ -350,11 +389,29 @@ export class TenantsService {
           },
         });
 
+        let tabletToken: string | null = null;
+        if (enableTablet) {
+          const rawDeviceToken = crypto.randomBytes(24).toString('hex');
+          const deviceTokenHash = crypto.createHash('sha256').update(rawDeviceToken).digest('hex');
+          await tx.device.create({
+            data: {
+              companyId: company.id,
+              tableId: table.id,
+              name: `Tablet ${tableLabel}`,
+              type: 'TABLET',
+              tokenHash: deviceTokenHash,
+              status: 'ACTIVE',
+            },
+          });
+          tabletToken = rawDeviceToken;
+        }
+
         createdTablesWithTokens.push({
           id: table.id,
           number: i,
           label: tableLabel,
           qrToken: rawToken, // Exclusivo no retorno da criação para impressão imediata
+          tabletToken,
         });
       }
 
@@ -407,21 +464,26 @@ export class TenantsService {
       }
 
       // 4. Starter Categories & Products (com Suporte a Catálogo Estático Versionado & Modificadores)
+      // O catálogo pronto (hamburgueria/pizzaria/...) é SÓ de restaurante:
+      // antes toda empresa nascia com produtos de lanchonete.
       let seededFromCatalog = false;
-      let presetFile = 'burger-house.json';
-      if (restCat === 'PIZZERIA') presetFile = 'pizzeria.json';
-      else if (restCat === 'RESTAURANT') presetFile = 'restaurant.json';
-      else if (restCat === 'JAPANESE') presetFile = 'japanese.json';
-      else if (restCat === 'PASTRY') presetFile = 'pastry.json';
+      let presetFile: string | null = null;
+      if (input.niche === 'RESTAURANT') {
+        presetFile = 'burger-house.json';
+        if (restCat === 'PIZZERIA') presetFile = 'pizzeria.json';
+        else if (restCat === 'RESTAURANT') presetFile = 'restaurant.json';
+        else if (restCat === 'JAPANESE') presetFile = 'japanese.json';
+        else if (restCat === 'PASTRY') presetFile = 'pastry.json';
+      }
 
-      let presetPath = path.join(__dirname, 'seed-catalog', presetFile);
-      if (!fs.existsSync(presetPath)) {
-        presetPath = path.join(process.cwd(), 'src', 'modules', 'tenants', 'seed-catalog', presetFile);
+      let presetPath: string | null = presetFile ? path.join(__dirname, 'seed-catalog', presetFile) : null;
+      if (presetPath && !fs.existsSync(presetPath)) {
+        presetPath = path.join(process.cwd(), 'src', 'modules', 'tenants', 'seed-catalog', presetFile as string);
       }
-      if (!fs.existsSync(presetPath)) {
-        presetPath = path.join(process.cwd(), 'apps', 'api', 'src', 'modules', 'tenants', 'seed-catalog', presetFile);
+      if (presetPath && !fs.existsSync(presetPath)) {
+        presetPath = path.join(process.cwd(), 'apps', 'api', 'src', 'modules', 'tenants', 'seed-catalog', presetFile as string);
       }
-      if (fs.existsSync(presetPath)) {
+      if (presetPath && fs.existsSync(presetPath)) {
         try {
           const presetData = JSON.parse(fs.readFileSync(presetPath, 'utf8'));
           if (presetData && Array.isArray(presetData.categories)) {
@@ -491,7 +553,19 @@ export class TenantsService {
       }
 
       if (!seededFromCatalog) {
-        const catTemplates = NICHE_DEFAULT_CATEGORIES[input.niche] || [];
+        // Barbearia nativa ganha o kit barbeiro; loja de roupa ganha as
+        // araras iniciais; academia ganha planos e suplementos; demais
+        // sub-templates (salão, refrigeração, gráfica, internet) nascem
+        // limpos — o dono cadastra o real em vez de herdar exemplo alheio.
+        const seedNicheKey =
+          input.niche === 'BARBERSHOP' && barbCat !== 'BARBEARIA' && barbCat !== 'LOJA_ROUPA' && barbCat !== 'ACADEMIA'
+            ? '__NONE__'
+            : barbCat === 'LOJA_ROUPA'
+              ? 'LOJA_ROUPA'
+              : barbCat === 'ACADEMIA'
+                ? 'ACADEMIA'
+                : input.niche;
+        const catTemplates = NICHE_DEFAULT_CATEGORIES[seedNicheKey] || [];
         const createdCats = [];
         for (let i = 0; i < catTemplates.length; i++) {
           const cat = await tx.productCategory.create({
@@ -507,7 +581,7 @@ export class TenantsService {
           createdCats.push(cat);
         }
 
-        const prodTemplates = NICHE_DEFAULT_PRODUCTS[input.niche] || [];
+        const prodTemplates = NICHE_DEFAULT_PRODUCTS[seedNicheKey] || [];
         for (const prod of prodTemplates) {
           const assignedCat = createdCats[prod.categoryIndex]?.id || null;
           await tx.product.create({
@@ -555,13 +629,16 @@ export class TenantsService {
         data: {
           tenantId: tenant.id,
           type: 'SYSTEM_SETUP',
-          title: 'Restaurante provisionado com sucesso!',
-          content: `Tudo pronto para ${input.companyName}! ${tableCount} mesas criadas com QR Codes, catálogo ${restCat} ativo e caixa configurado.`,
+          title: `${input.niche === 'RESTAURANT' ? 'Restaurante' : 'Empresa'} provisionada com sucesso!`,
+          content:
+            input.niche === 'RESTAURANT'
+              ? `Tudo pronto para ${input.companyName}! ${tableCount} mesas criadas com QR Codes, catálogo ${restCat} ativo e caixa configurado.`
+              : `Tudo pronto para ${input.companyName}! Ambiente configurado e caixa pronto para operar.`,
         },
       });
 
       // 6. Tenant Site with Visual Identity & Branding
-      const templateKey = input.niche === 'RESTAURANT' ? 'bistro' : input.niche === 'BARBERSHOP' ? 'studio' : 'market';
+      const templateKey = input.niche === 'RESTAURANT' ? 'bistro' : input.niche === 'BARBERSHOP' ? 'studio' : 'minimal';
       await tx.tenantSite.create({
         data: {
           tenantId: tenant.id,
@@ -638,6 +715,162 @@ export class TenantsService {
       });
       return tenant;
     });
+  }
+
+  /**
+   * Exclusão definitiva da empresa (SUPER_ADMIN/DEV, via painel).
+   * Apaga em ordem de dependência dentro de uma transação: primeiro os
+   * documentos e movimentos, depois cadastros, usuários e por fim Company
+   * e Tenant. Tabelas globais da plataforma (Plan, Coupon, SystemSetting,
+   * EmailTemplate, KnowledgeArticle) nunca são tocadas.
+   */
+  async remove(id: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id },
+      select: { id: true, companyName: true, tradeName: true, slug: true },
+    });
+    if (!tenant) throw new NotFoundException('Empresa não encontrada');
+
+    const userIds = (
+      await this.prisma.user.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((u) => u.id);
+    const orderIds = (
+      await this.prisma.order.findMany({
+        where: { OR: [{ tenantId: id }, { companyId: id }] },
+        select: { id: true },
+      })
+    ).map((o) => o.id);
+    const productIds = (
+      await this.prisma.product.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((p) => p.id);
+    const ticketIds = (
+      await this.prisma.ticket.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((t) => t.id);
+    const convIds = (
+      await this.prisma.aiConversation.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((c) => c.id);
+    const nfeIds = (
+      await this.prisma.nfeEntry.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((n) => n.id);
+    const poIds = (
+      await this.prisma.purchaseOrder.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((p) => p.id);
+    const auditIds = (
+      await this.prisma.inventoryAudit.findMany({ where: { tenantId: id }, select: { id: true } })
+    ).map((a) => a.id);
+    const groupIds = (
+      await this.prisma.productModifierGroup.findMany({
+        where: { productId: { in: productIds } },
+        select: { id: true },
+      })
+    ).map((g) => g.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Itens e vínculos mais profundos
+      if (orderIds.length > 0) {
+        await tx.orderItemModifier.deleteMany({ where: { orderItem: { orderId: { in: orderIds } } } });
+        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+      }
+      if (nfeIds.length > 0) {
+        await tx.nfeEntryItem.deleteMany({ where: { nfeEntryId: { in: nfeIds } } });
+      }
+      if (poIds.length > 0) {
+        await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: { in: poIds } } });
+      }
+      if (auditIds.length > 0) {
+        await tx.inventoryAuditItem.deleteMany({ where: { inventoryId: { in: auditIds } } });
+      }
+      if (groupIds.length > 0) {
+        await tx.productModifierItem.deleteMany({ where: { groupId: { in: groupIds } } });
+        await tx.productModifierGroup.deleteMany({ where: { id: { in: groupIds } } });
+      }
+      if (productIds.length > 0) {
+        await tx.productBarcode.deleteMany({ where: { productId: { in: productIds } } });
+        await tx.productIngredient.deleteMany({
+          where: { OR: [{ recipeId: { in: productIds } }, { ingredientId: { in: productIds } }] },
+        });
+        await tx.productSupplier.deleteMany({ where: { productId: { in: productIds } } });
+      }
+      if (ticketIds.length > 0) {
+        await tx.ticketMessage.deleteMany({ where: { ticketId: { in: ticketIds } } });
+        await tx.ticketStatusHistory.deleteMany({ where: { ticketId: { in: ticketIds } } });
+      }
+      if (convIds.length > 0) {
+        await tx.aiMessage.deleteMany({ where: { conversationId: { in: convIds } } });
+      }
+      if (userIds.length > 0) {
+        await tx.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
+        await tx.recoveryCode.deleteMany({ where: { userId: { in: userIds } } });
+        await tx.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+        await tx.barberProfile.deleteMany({ where: { userId: { in: userIds } } });
+      }
+
+      // Documentos e movimentos do tenant/company
+      const tenantScope = { tenantId: id };
+      const dualScope = { OR: [{ tenantId: id }, { companyId: id }] };
+      await tx.tableSession.deleteMany({ where: { companyId: id } });
+      await tx.waiterCall.deleteMany({ where: { companyId: id } });
+      await tx.order.deleteMany({ where: dualScope });
+      await tx.orderReturn.deleteMany({ where: tenantScope });
+      await tx.cashMovement.deleteMany({ where: tenantScope });
+      await tx.cashRegister.deleteMany({ where: tenantScope });
+      await tx.cashClosing.deleteMany({ where: tenantScope });
+      await tx.serviceFeePayout.deleteMany({ where: { companyId: id } });
+      await tx.serviceFeePayment.deleteMany({ where: { companyId: id } });
+      await tx.billPayable.deleteMany({ where: tenantScope });
+      await tx.billReceivable.deleteMany({ where: tenantScope });
+      await tx.invoice.deleteMany({ where: tenantScope });
+      await tx.couponUsage.deleteMany({ where: { tenantId: id } });
+      await tx.subscription.deleteMany({ where: tenantScope });
+      await tx.purchaseNoteItem.deleteMany({ where: { purchaseNote: { tenantId: id } } });
+      await tx.purchaseNote.deleteMany({ where: dualScope });
+      await tx.purchaseOrder.deleteMany({ where: tenantScope });
+      await tx.nfeEntry.deleteMany({ where: tenantScope });
+      await tx.offlineSyncQueue.deleteMany({ where: tenantScope });
+      await tx.stockLoss.deleteMany({ where: tenantScope });
+      await tx.stockMovement.deleteMany({ where: tenantScope });
+      await tx.inventoryAudit.deleteMany({ where: tenantScope });
+      await tx.stockBatch.deleteMany({ where: tenantScope });
+      await tx.appointment.deleteMany({ where: tenantScope });
+      await tx.calendarEvent.deleteMany({ where: tenantScope });
+      await tx.service.deleteMany({ where: tenantScope });
+      await tx.gymClassBooking.deleteMany({ where: tenantScope });
+      await tx.gymClass.deleteMany({ where: tenantScope });
+      await tx.gymAssessment.deleteMany({ where: tenantScope });
+      await tx.gymWorkout.deleteMany({ where: tenantScope });
+      await tx.gymCheckIn.deleteMany({ where: tenantScope });
+      await tx.gymEnrollment.deleteMany({ where: tenantScope });
+      await tx.gymStudent.deleteMany({ where: tenantScope });
+      await tx.serviceOrderItem.deleteMany({ where: { order: { tenantId: id } } });
+      await tx.serviceOrder.deleteMany({ where: tenantScope });
+      await tx.serviceQuote.deleteMany({ where: tenantScope });
+      await tx.serviceEquipment.deleteMany({ where: tenantScope });
+      await tx.task.deleteMany({ where: dualScope });
+      await tx.aiConversation.deleteMany({ where: dualScope });
+      await tx.automationNotification.deleteMany({ where: tenantScope });
+      await tx.automationRule.deleteMany({ where: tenantScope });
+      await tx.supplier.deleteMany({ where: tenantScope });
+      await tx.product.deleteMany({ where: tenantScope });
+      await tx.productCategory.deleteMany({ where: tenantScope });
+      await tx.customer.deleteMany({ where: tenantScope });
+      await tx.ticket.deleteMany({ where: tenantScope });
+      await tx.tenantNote.deleteMany({ where: tenantScope });
+      await tx.tenantAccessLog.deleteMany({ where: tenantScope });
+      await tx.tenantSite.deleteMany({ where: tenantScope });
+      await tx.storeSetting.deleteMany({ where: tenantScope });
+      await tx.cashierTerminal.deleteMany({ where: tenantScope });
+
+      // Estrutura da empresa + usuários + empresa
+      await tx.role.deleteMany({ where: { companyId: id } });
+      await tx.table.deleteMany({ where: { companyId: id } });
+      await tx.device.deleteMany({ where: { companyId: id } });
+      await tx.tipConfig.deleteMany({ where: { companyId: id } });
+      await tx.user.deleteMany({ where: { tenantId: id } });
+      await tx.company.deleteMany({ where: { id } });
+      await tx.tenant.delete({ where: { id } });
+    });
+
+    return { success: true, id, name: tenant.tradeName || tenant.companyName };
   }
 
   async extendTrial(id: string, days: number = 7) {

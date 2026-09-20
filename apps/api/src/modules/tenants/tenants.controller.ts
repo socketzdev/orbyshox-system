@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Header, StreamableFile, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Header, StreamableFile, BadRequestException } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { SlugService } from '../../common/services/slug.service';
 import { AuditLog } from '../../common/interceptors/audit.interceptor';
@@ -103,6 +103,11 @@ export class TenantsController {
   @Roles('SUPER_ADMIN', 'SUPPORT_MANAGER')
   @AuditLog('VIEW_AS_TENANT', 'Tenant')
   viewAs(@Param('id') id: string, @CurrentUser() user: any) { return this.tenantsService.viewAs(id, user.id); }
+
+  @Delete(':id')
+  @Roles('SUPER_ADMIN', 'DEV')
+  @AuditLog('DELETE_TENANT', 'Tenant')
+  remove(@Param('id') id: string) { return this.tenantsService.remove(id); }
 
   @Get(':id/notes')
   @Roles('SUPER_ADMIN', 'SUPPORT_MANAGER', 'SUPPORT_AGENT')
