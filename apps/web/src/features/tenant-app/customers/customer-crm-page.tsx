@@ -41,6 +41,7 @@ export const CustomerCrmPage: React.FC = () => {
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ['tenant-customers', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/customers`),
+    refetchInterval: 30000,
   });
 
   const createMutation = useMutation({
@@ -143,7 +144,7 @@ export const CustomerCrmPage: React.FC = () => {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[650px] text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-100 text-zinc-400 font-semibold uppercase text-[10px] tracking-wider">
                   <th className="pb-3 font-semibold">Cliente</th>

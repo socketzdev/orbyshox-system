@@ -55,6 +55,7 @@ export const LossesPage: React.FC = () => {
   const { data: losses = [], isLoading } = useQuery({
     queryKey: ['stock-losses', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/stock/losses`),
+    refetchInterval: 30000,
   });
 
   const { data: productsData } = useQuery({
@@ -185,7 +186,7 @@ export const LossesPage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[650px] text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50/40 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                 <th className="py-3 px-4">Data</th>

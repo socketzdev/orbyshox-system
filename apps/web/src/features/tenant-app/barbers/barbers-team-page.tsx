@@ -149,6 +149,7 @@ export const BarbersTeamPage: React.FC = () => {
   const { data, isLoading } = useQuery<TeamPayload>({
     queryKey: ['tenant-barbers', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/barbers`),
+    refetchInterval: 30000,
   });
 
   const openProfile = (barber: Barber) => {

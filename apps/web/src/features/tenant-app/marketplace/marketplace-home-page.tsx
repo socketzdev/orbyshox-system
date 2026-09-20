@@ -102,26 +102,31 @@ export const MarketplaceHomePage: React.FC = () => {
   const { data: stats, isLoading: loadingStats } = useQuery<BatchStats>({
     queryKey: ['batches-stats', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/batches/stats`),
+    refetchInterval: 30000,
   });
 
   const { data: suppliers = [], isLoading: loadingSuppliers } = useQuery<Supplier[]>({
     queryKey: ['suppliers', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/suppliers`),
+    refetchInterval: 30000,
   });
 
   const { data: orders = [], isLoading: loadingOrders } = useQuery<PurchaseOrder[]>({
     queryKey: ['purchase-orders', slug, 'home'],
     queryFn: () => apiGet(`/tenant-app/${slug}/purchase-orders`),
+    refetchInterval: 30000,
   });
 
   const { data: suggestions = [], isLoading: loadingSuggestions } = useQuery<Suggestion[]>({
     queryKey: ['purchase-suggestions', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/purchase-orders/suggestions`),
+    refetchInterval: 30000,
   });
 
   const { data: nfes = [], isLoading: loadingNfe } = useQuery<Nfe[]>({
     queryKey: ['nfe-home', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/nfe`),
+    refetchInterval: 30000,
   });
 
   const go = (path: string) => navigate(`${base}/marketplace${path}`);

@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { resolvePortalDestination } from '@/lib/role-routing';
 
 // Esquemas de validação
 const formSchema = z.object({
@@ -188,6 +189,8 @@ export const LoginPage: React.FC = () => {
       const response: any = await apiPost('/auth/login', {
         email: trimmedIdentifier, // Backend validateUser aceita telefone/WhatsApp ou e-mail
         password: trimmedPassword,
+        // Sem marcar: sessão curta; marcado: refresh de 30 dias.
+        rememberMe: data.rememberMe !== false,
       });
 
       if (response?.mfaRequired) {
@@ -213,9 +216,7 @@ export const LoginPage: React.FC = () => {
       setFailedAttempts(0);
 
       const isSuperAdmin = userData.role === 'SUPER_ADMIN';
-      const destination = isSuperAdmin
-        ? (redirectTo && !redirectTo.startsWith('/app') ? redirectTo : '/dashboard')
-        : '/app/dashboard';
+      const destination = resolvePortalDestination(userData, redirectTo);
 
       toast.success(isSuperAdmin ? 'Login de Super Admin autorizado com sucesso!' : `Bem-vindo, ${userData.name || 'usuário'}!`);
       window.location.href = destination;
@@ -298,9 +299,7 @@ export const LoginPage: React.FC = () => {
       setFailedAttempts(0);
 
       const isSuperAdmin = userData.role === 'SUPER_ADMIN';
-      const destination = isSuperAdmin
-        ? (redirectTo && !redirectTo.startsWith('/app') ? redirectTo : '/dashboard')
-        : '/app/dashboard';
+      const destination = resolvePortalDestination(userData, redirectTo);
 
       toast.success(isSuperAdmin ? 'Duplo fator confirmado! Acesso de Super Admin liberado.' : `Bem-vindo, ${userData.name || 'usuário'}!`);
       window.location.href = destination;
@@ -345,6 +344,22 @@ export const LoginPage: React.FC = () => {
         {/* ─── LADO ESQUERDO: Formulário Branco ─── */}
         <div className="lg:col-span-6 p-6 sm:p-10 md:p-12 flex flex-col justify-between bg-white overflow-y-auto no-scrollbar">
           <div>
+            {/* LOGO ORBYSHOX */}
+            <div className="mb-6 flex items-center gap-3">
+              <img
+                src="/orbyshox-logo.png"
+                alt="Orbyshox"
+                className="h-11 w-11 rounded-2xl object-contain bg-white shadow-sm border border-slate-100"
+              />
+              <div>
+                <span className="font-bold text-base text-slate-900 tracking-tight block leading-tight">
+                  Orbyshox
+                </span>
+                <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase block">
+                  Gestão Empresarial
+                </span>
+              </div>
+            </div>
             {/* BOTÃO VOLTAR QUANDO ESTIVER EM OUTROS MODOS */}
             {mode !== 'login' && (
               <button

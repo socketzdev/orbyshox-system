@@ -33,6 +33,8 @@ import {
   ShieldCheck,
   AlertCircle,
   Copy,
+  QrCode,
+  Tablet,
 } from 'lucide-react';
 import { apiPost, apiGet } from '@/lib/api';
 import { useSlugCheck } from '@/lib/use-slug-check';
@@ -40,7 +42,7 @@ import { normalizeSlug } from '@/lib/slug';
 import { toast } from 'sonner';
 
 export const SEGMENT_TEMPLATES: Record<
-  'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET',
+  'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET' | 'UNIVERSAL',
   {
     name: string;
     badge: string;
@@ -187,67 +189,140 @@ export const SEGMENT_TEMPLATES: Record<
     ],
   },
   SUPERMARKET: {
-    name: 'Supermercado & Varejo',
-    badge: 'Varejo & Frente de Caixa',
+    name: 'Universal',
+    badge: 'PDV, Estoque & Financeiro',
     defaultDescription:
-      'Supermercado com leitor de código de barras, balança de pesagem e controle de validade.',
+      'Operação universal para qualquer negócio: frente de caixa, produtos, estoque, clientes e financeiro.',
     defaultFeatures: [
-      'pos_fast',
-      'stock_batches',
-      'xml_import',
-      'promotions',
       'pos',
-      'finance',
+      'products',
       'stock',
+      'stock_batches',
+      'customers',
+      'finance',
+      'reports',
+      'team',
+      'settings',
       'automations',
+      'promotions',
     ],
     modules: [
       {
-        id: 'pos_fast',
-        label: 'Checkout Rápido & Balança',
-        desc: 'Leitura de código EAN-13 e etiqueta de peso',
+        id: 'pos',
+        label: 'Frente de Caixa (PDV)',
+        desc: 'Vendas rápidas no balcão com múltiplas formas de pagamento',
         icon: ShoppingCart,
       },
       {
-        id: 'xml_import',
-        label: 'Importação de XML de Notas (NFe)',
-        desc: 'Cadastro automático de mercadorias com 1 clique',
-        icon: FileText,
-      },
-      {
-        id: 'stock_batches',
-        label: 'Lotes & Controle de Validade',
-        desc: 'Prevenção de perdas e alertas de produtos vencendo',
+        id: 'products',
+        label: 'Catálogo & Produtos',
+        desc: 'Cadastro de produtos e serviços com preços',
         icon: Package,
       },
       {
-        id: 'promotions',
-        label: 'Encartes & Promoções',
-        desc: 'Regras de preços promocionais por data e quantidade',
-        icon: Sparkles,
+        id: 'stock',
+        label: 'Controle de Estoque',
+        desc: 'Saldo, inventário, perdas e lotes com validade',
+        icon: Package,
       },
       {
-        id: 'pos',
-        label: 'Terminal PDV Secundário',
-        desc: 'Suporte a múltiplos caixas simultâneos na loja',
-        icon: ShoppingCart,
+        id: 'customers',
+        label: 'Clientes & CRM',
+        desc: 'Cadastro e histórico de clientes',
+        icon: User,
       },
       {
         id: 'finance',
-        label: 'Financeiro & Sangrias',
+        label: 'Financeiro & Caixa',
         desc: 'Controle de gaveta, faturamento e contas a pagar',
         icon: FileText,
       },
       {
-        id: 'stock',
-        label: 'Inventário Geral',
-        desc: 'Auditoria de estoque por conferência e ruptura',
-        icon: Package,
+        id: 'reports',
+        label: 'Relatórios & Fechamento',
+        desc: 'Faturamento por período e impressão do fechamento',
+        icon: FileText,
+      },
+      {
+        id: 'team',
+        label: 'Equipe',
+        desc: 'Funcionários e permissões de acesso',
+        icon: User,
       },
       {
         id: 'automations',
-        label: 'Alertas de Ruptura',
-        desc: 'Notificações para o gerente de compras',
+        label: 'Automações & Alertas',
+        desc: 'Avisos de estoque baixo e vencimentos',
+        icon: Sparkles,
+      },
+    ],
+  },
+  // Alias legado: empresas antigas de mercado usam o mesmo template Universal.
+  UNIVERSAL: {
+    name: 'Universal',
+    badge: 'PDV, Estoque & Financeiro',
+    defaultDescription:
+      'Operação universal para qualquer negócio: frente de caixa, produtos, estoque, clientes e financeiro.',
+    defaultFeatures: [
+      'pos',
+      'products',
+      'stock',
+      'stock_batches',
+      'customers',
+      'finance',
+      'reports',
+      'team',
+      'settings',
+      'automations',
+      'promotions',
+    ],
+    modules: [
+      {
+        id: 'pos',
+        label: 'Frente de Caixa (PDV)',
+        desc: 'Vendas rápidas no balcão com múltiplas formas de pagamento',
+        icon: ShoppingCart,
+      },
+      {
+        id: 'products',
+        label: 'Catálogo & Produtos',
+        desc: 'Cadastro de produtos e serviços com preços',
+        icon: Package,
+      },
+      {
+        id: 'stock',
+        label: 'Controle de Estoque',
+        desc: 'Saldo, inventário, perdas e lotes com validade',
+        icon: Package,
+      },
+      {
+        id: 'customers',
+        label: 'Clientes & CRM',
+        desc: 'Cadastro e histórico de clientes',
+        icon: User,
+      },
+      {
+        id: 'finance',
+        label: 'Financeiro & Caixa',
+        desc: 'Controle de gaveta, faturamento e contas a pagar',
+        icon: FileText,
+      },
+      {
+        id: 'reports',
+        label: 'Relatórios & Fechamento',
+        desc: 'Faturamento por período e impressão do fechamento',
+        icon: FileText,
+      },
+      {
+        id: 'team',
+        label: 'Equipe',
+        desc: 'Funcionários e permissões de acesso',
+        icon: User,
+      },
+      {
+        id: 'automations',
+        label: 'Automações & Alertas',
+        desc: 'Avisos de estoque baixo e vencimentos',
         icon: Sparkles,
       },
     ],
@@ -282,10 +357,17 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
   const [tradeNameManuallyEdited, setTradeNameManuallyEdited] = useState(false);
   const slugCheck = useSlugCheck(newTradeName || newCompanyName);
   const [newCnpj, setNewCnpj] = useState('');
-  const [newNiche, setNewNiche] = useState<'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET'>('RESTAURANT');
+  const [newNiche, setNewNiche] = useState<'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET' | 'UNIVERSAL'>('RESTAURANT');
   const [restaurantCategory, setRestaurantCategory] = useState<
     'BURGER_HOUSE' | 'PIZZERIA' | 'RESTAURANT' | 'JAPANESE' | 'PASTRY'
   >('BURGER_HOUSE');
+  const [barbershopCategory, setBarbershopCategory] = useState<
+    'BARBEARIA' | 'SALAO_FEMININO' | 'REFRIGERACAO' | 'GRAFICA' | 'INTERNET' | 'LOJA_ROUPA' | 'ACADEMIA'
+  >('BARBEARIA');
+  const [tableCount, setTableCount] = useState<number>(10);
+  const [enableQrCode, setEnableQrCode] = useState<boolean>(true);
+  const [enableTablet, setEnableTablet] = useState<boolean>(true);
+  const [enableWaiterCall, setEnableWaiterCall] = useState<boolean>(true);
   const [newDescription, setNewDescription] = useState(
     SEGMENT_TEMPLATES.RESTAURANT.defaultDescription
   );
@@ -347,6 +429,10 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
       setNewAdminName('');
       setNewAdminEmail('');
       setNewAdminPassword('');
+      setTableCount(10);
+      setEnableQrCode(true);
+      setEnableTablet(true);
+      setEnableWaiterCall(true);
       setProvisioningState({
         step: 1,
         text: 'Validando credenciais e domínio corporativo...',
@@ -436,14 +522,15 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
 
       // Detect niche
       const descCnae = (data.cnae_fiscal_descricao || '').toLowerCase();
-      let detectedNiche: 'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET' = newNiche;
+      let detectedNiche: 'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET' | 'UNIVERSAL' = newNiche;
 
       if (descCnae.includes('cabelereiro') || descCnae.includes('estética') || descCnae.includes('barbearia')) {
         detectedNiche = 'BARBERSHOP';
       } else if (descCnae.includes('restaurante') || descCnae.includes('refeição') || descCnae.includes('bar') || descCnae.includes('lanchonete')) {
         detectedNiche = 'RESTAURANT';
-      } else if (descCnae.includes('supermercado') || descCnae.includes('mercado') || descCnae.includes('mercearia') || descCnae.includes('varejista')) {
-        detectedNiche = 'SUPERMARKET';
+      } else if (descCnae) {
+        // Qualquer outro ramo (mercados, varejo, serviços) → template Universal.
+        detectedNiche = 'UNIVERSAL';
       }
 
       applySegmentTemplate(detectedNiche);
@@ -458,7 +545,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
   };
 
   // Segment template selection
-  const applySegmentTemplate = (nicheKey: 'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET') => {
+  const applySegmentTemplate = (nicheKey: 'RESTAURANT' | 'BARBERSHOP' | 'SUPERMARKET' | 'UNIVERSAL') => {
     setNewNiche(nicheKey);
     setNewDescription(SEGMENT_TEMPLATES[nicheKey].defaultDescription);
     setNewFeatures(SEGMENT_TEMPLATES[nicheKey].defaultFeatures);
@@ -554,7 +641,11 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
       slug: finalSlug,
       niche: newNiche,
       restaurantCategory: newNiche === 'RESTAURANT' ? restaurantCategory : undefined,
-      tableCount: 0,
+      barbershopCategory: newNiche === 'BARBERSHOP' ? barbershopCategory : undefined,
+      tableCount: newNiche === 'RESTAURANT' ? Number(tableCount) : 0,
+      enableQrCode: newNiche === 'RESTAURANT' ? enableQrCode : false,
+      enableTablet: newNiche === 'RESTAURANT' ? enableTablet : false,
+      enableWaiterCall: newNiche === 'RESTAURANT' ? enableWaiterCall : false,
       cnpj: newCnpj.trim() || undefined,
       description: newDescription.trim() || undefined,
       features: newFeatures,
@@ -596,17 +687,17 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-tenants-list'] });
 
-      toast.success(`Empresa ${payload.tradeName} criada com sucesso! Redirecionando para login...`);
+      toast.success(`Empresa ${payload.tradeName} criada com sucesso!`);
 
       if (onTenantCreated) onTenantCreated(finalTenantObj);
 
       onOpenChange(false);
 
-      // Redireciona para /login com os dados pré-preenchidos
-      const loginId = newPhone || adminEmail;
-      setTimeout(() => {
-        window.location.href = `/login?identifier=${encodeURIComponent(loginId)}&created=true&company=${encodeURIComponent(payload.tradeName)}`;
-      }, 750);
+      // Permanece no painel: sem redirect para /login (era isso que
+      // derrubava a sessão do Super Admin após cada criação).
+      if (finalTenantObj?.id) {
+        navigate(`/tenants/${finalTenantObj.id}`);
+      }
     } catch (err: any) {
       let message = 'Falha ao provisionar empresa.';
       const resData = err?.response?.data;
@@ -759,7 +850,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
                       {[
                         { key: 'RESTAURANT', label: 'Restaurante', icon: UtensilsCrossed },
                         { key: 'BARBERSHOP', label: 'Barbearia', icon: Scissors },
-                        { key: 'SUPERMARKET', label: 'Mercado', icon: ShoppingCart },
+                        { key: 'UNIVERSAL', label: 'Universal', icon: ShoppingCart },
                       ].map((item) => {
                         const Icon = item.icon;
                         const isSelected = newNiche === item.key;
@@ -809,6 +900,138 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
                               <span>{cat.label}</span>
                             </button>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Subcategorias quando for Barbearia (igual ao Restaurante) */}
+                    {newNiche === 'BARBERSHOP' && (
+                      <div className="pt-2 border-t border-zinc-200/60 flex items-center gap-2 animate-in fade-in duration-200">
+                        <span className="text-[11px] text-zinc-500 font-medium shrink-0">
+                          Template:
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {[
+                            { key: 'BARBEARIA', label: 'Barbearia' },
+                            { key: 'SALAO_FEMININO', label: 'Salão Feminino' },
+                            { key: 'REFRIGERACAO', label: 'Refrigeração' },
+                            { key: 'GRAFICA', label: 'Gráfica / Design' },
+                            { key: 'INTERNET', label: 'Internet' },
+                            { key: 'LOJA_ROUPA', label: 'Loja de Roupa' },
+                            { key: 'ACADEMIA', label: 'Academia' },
+                          ].map((cat) => (
+                            <button
+                              key={cat.key}
+                              type="button"
+                              onClick={() => setBarbershopCategory(cat.key as any)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border transition-all cursor-pointer ${
+                                barbershopCategory === cat.key
+                                  ? 'bg-zinc-950 text-white border-zinc-950 font-medium'
+                                  : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100'
+                              }`}
+                            >
+                              <span>{cat.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Salão, Mesas e Autoatendimento (Apenas Restaurantes) */}
+                    {newNiche === 'RESTAURANT' && (
+                      <div className="mt-3 pt-3 border-t border-zinc-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <UtensilsCrossed className="w-3.5 h-3.5 text-zinc-700" />
+                            <label className="text-[11px] font-semibold text-zinc-800">
+                              Salão, Mesas & Autoatendimento
+                            </label>
+                          </div>
+                          <span className="text-[10px] text-zinc-400">Configuração automática</span>
+                        </div>
+
+                        {/* Quantidade de Mesas */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs text-zinc-600">Quantidade de Mesas Iniciais:</span>
+                            <span className="text-xs font-bold font-mono text-zinc-900 bg-zinc-200/60 px-2 py-0.5 rounded">
+                              {tableCount} mesas
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {[6, 10, 15, 20].map((count) => (
+                              <button
+                                key={count}
+                                type="button"
+                                onClick={() => setTableCount(count)}
+                                className={`flex-1 py-1 text-xs rounded-lg border transition-all cursor-pointer font-medium ${
+                                  tableCount === count
+                                    ? 'bg-zinc-900 text-white border-zinc-900'
+                                    : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100'
+                                }`}
+                              >
+                                {count}
+                              </button>
+                            ))}
+                            <div className="w-20">
+                              <Input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={tableCount}
+                                onChange={(e) => setTableCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                                className="h-7 text-xs text-center font-mono py-0 px-1"
+                                placeholder="Outro"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Toggles Rápidos de Autoatendimento */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          <div
+                            onClick={() => setEnableQrCode(!enableQrCode)}
+                            className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                              enableQrCode
+                                ? 'bg-zinc-900 text-white border-zinc-900'
+                                : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'
+                            }`}
+                          >
+                            <QrCode className={`w-4 h-4 shrink-0 mt-0.5 ${enableQrCode ? 'text-white' : 'text-zinc-500'}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold">QR Code nas Mesas</div>
+                              <div className={`text-[10px] leading-tight mt-0.5 ${enableQrCode ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                                Clientes pedem pelo celular escaneando a mesa
+                              </div>
+                            </div>
+                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
+                              enableQrCode ? 'bg-white border-white text-zinc-900' : 'border-zinc-300'
+                            }`}>
+                              {enableQrCode && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </div>
+
+                          <div
+                            onClick={() => setEnableTablet(!enableTablet)}
+                            className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                              enableTablet
+                                ? 'bg-zinc-900 text-white border-zinc-900'
+                                : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'
+                            }`}
+                          >
+                            <Tablet className={`w-4 h-4 shrink-0 mt-0.5 ${enableTablet ? 'text-white' : 'text-zinc-500'}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold">Tablet Fixo na Mesa</div>
+                              <div className={`text-[10px] leading-tight mt-0.5 ${enableTablet ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                                Provisiona dispositivos de autoatendimento
+                              </div>
+                            </div>
+                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
+                              enableTablet ? 'bg-white border-white text-zinc-900' : 'border-zinc-300'
+                            }`}>
+                              {enableTablet && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1311,6 +1534,26 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
                             {newPhone || '—'}
                           </span>
                         </div>
+                        {newNiche === 'RESTAURANT' && (
+                          <div className="col-span-2 sm:col-span-3 pt-2 border-t border-zinc-200/60 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="text-[10px] text-zinc-400 font-medium">Salão & Autoatendimento:</span>
+                            <span className="inline-flex items-center gap-1 font-semibold text-zinc-900 bg-white px-2 py-0.5 rounded border border-zinc-200">
+                              🪑 {tableCount} Mesas
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] ${
+                              enableQrCode ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-medium' : 'bg-zinc-100 text-zinc-400 border-zinc-200'
+                            }`}>
+                              <QrCode className="w-3 h-3" />
+                              {enableQrCode ? 'QR Code Ativo' : 'Sem QR Code'}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] ${
+                              enableTablet ? 'bg-blue-50 text-blue-700 border-blue-200 font-medium' : 'bg-zinc-100 text-zinc-400 border-zinc-200'
+                            }`}>
+                              <Tablet className="w-3 h-3" />
+                              {enableTablet ? 'Tablets nas Mesas' : 'Sem Tablets'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 

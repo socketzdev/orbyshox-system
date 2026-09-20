@@ -6,7 +6,6 @@ import {
   Plus,
   Minus,
   Trash2,
-  CheckCircle2,
   QrCode,
   DollarSign,
   CreditCard,
@@ -23,6 +22,7 @@ import { apiGet, apiPost } from '@/lib/api';
 import type { PaymentMethod } from './domain/payment-methods';
 import { computeChange, computeTotals, discountToCents } from './domain/pricing';
 import { useTenant } from '../context/tenant-context';
+import { ReceiptDialog } from '../components/receipt-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +50,14 @@ export const PosTerminalPage: React.FC = () => {
   const { slug, tenant } = useTenant();
   const queryClient = useQueryClient();
 
+  const isRestaurant =
+    tenant?.niche === 'RESTAURANT' ||
+    (!['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL'].includes(String(tenant?.niche || '').toUpperCase()) &&
+      ['JAPANESE', 'BURGER_HOUSE', 'PIZZERIA', 'PASTRY', 'RESTAURANT'].includes(
+        String(tenant?.niche || (tenant as any)?.category || (tenant as any)?.company?.category || '').toUpperCase()
+      )) ||
+    (tenant?.features || []).includes('tables');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -70,6 +78,7 @@ export const PosTerminalPage: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['pos-products', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/products`),
+    refetchInterval: 30000,
   });
 
   const categories = data?.categories || [];
@@ -164,6 +173,10 @@ export const PosTerminalPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-dashboard', slug] });
       queryClient.invalidateQueries({ queryKey: ['tenant-automations', slug] });
       queryClient.invalidateQueries({ queryKey: ['cash-register', slug] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-orders', slug] });
+      queryClient.invalidateQueries({ queryKey: ['day-closing'] });
+      queryClient.invalidateQueries({ queryKey: ['reports-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['restaurant-dashboard', slug] });
 
       setLastOrder({
         ...res,
@@ -230,7 +243,7 @@ export const PosTerminalPage: React.FC = () => {
   const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="h-[calc(100vh-6.5rem)] flex flex-col md:flex-row gap-5 font-sans">
+    <div className="min-h-0 md:h-[calc(100vh-6.5rem)] flex flex-col md:flex-row gap-5 font-sans pb-6 md:pb-0">
       {/* ─── Coluna Esquerda: Catálogo e Busca Rápida ────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 bg-white rounded-2xl border border-zinc-200/80 shadow-soft p-5 overflow-hidden">
         {/* Search Bar & Scanner Input */}
@@ -239,7 +252,7 @@ export const PosTerminalPage: React.FC = () => {
             <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3 pointer-events-none" />
             <Input
               type="text"
-              placeholder="Buscar por nome ou bipar código de barras..."
+              placeholder={isRestaurant ? "Buscar prato ou bebida..." : "Buscar por nome ou bipar código de barras..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 h-10 text-xs rounded-xl border-zinc-200 focus-visible:border-zinc-900 bg-zinc-50/50"
@@ -287,7 +300,7 @@ export const PosTerminalPage: React.FC = () => {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto pr-1">
+        <div className="flex-1 overflow-y-auto max-h-[50vh] md:max-h-none pr-1">
           {isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -332,10 +345,14 @@ export const PosTerminalPage: React.FC = () => {
                             className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
                               isLowStock
                                 ? 'bg-amber-100 text-amber-800'
+                                : Number(product.stockQuantity) >= 999000
+                                ? 'bg-emerald-50 text-emerald-700'
                                 : 'bg-zinc-100 text-zinc-600'
                             }`}
                           >
-                            {Number(product.stockQuantity)} {product.unit}
+                            {Number(product.stockQuantity) >= 999000
+                              ? 'Sob Demanda'
+                              : `${Number(product.stockQuantity)} ${product.unit}`}
                           </span>
                         </div>
                       </div>
@@ -390,7 +407,7 @@ export const PosTerminalPage: React.FC = () => {
         </div>
 
         {/* Cart Items List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+        <div className="flex-1 overflow-y-auto max-h-[40vh] md:max-h-none p-4 space-y-2.5">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 text-xs py-16 gap-2">
               <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400 mb-1">
@@ -660,52 +677,51 @@ export const PosTerminalPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Modal de Sucesso Pós-Venda ─────────────────────────────── */}
-      <Dialog open={successModalOpen} onOpenChange={setSuccessModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-zinc-200 p-6 rounded-2xl text-center font-sans">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3 border border-emerald-200/60 shadow-xs">
-            <CheckCircle2 className="w-8 h-8" />
-          </div>
-
-          <DialogTitle className="text-xl font-bold text-zinc-900">
-            Venda Concluída!
-          </DialogTitle>
-          <DialogDescription className="text-xs text-zinc-500 mt-1">
-            Pedido <span className="font-mono font-bold text-zinc-900">#{lastOrder?.orderNumber}</span> registrado no caixa com sucesso.
-          </DialogDescription>
-
-          <div className="my-4 p-4 rounded-xl bg-zinc-50 border border-zinc-200/80 text-left text-xs space-y-2">
-            <div className="flex justify-between text-zinc-600">
-              <span>Forma de Pagamento:</span>
-              <span className="font-bold text-zinc-900 uppercase">{lastOrder?.paymentMethod}</span>
-            </div>
-            <div className="flex justify-between text-zinc-600">
-              <span>Total Pago:</span>
-              <span className="font-bold text-zinc-900 font-mono">
-                R$ {((lastOrder?.totalCents || 0) / 100).toFixed(2)}
-              </span>
-            </div>
-            {lastOrder?.paymentMethod === 'DINHEIRO' && lastOrder?.changeCents > 0 && (
-              <div className="flex justify-between text-emerald-800 font-bold pt-2 border-t border-zinc-200">
-                <span>Troco Devolvido:</span>
-                <span className="font-mono">
-                  R$ {(lastOrder.changeCents / 100).toFixed(2)}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Button
-              className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs h-10 rounded-xl flex items-center justify-center gap-2 shadow-sm"
-              onClick={() => setSuccessModalOpen(false)}
-            >
-              <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>Nova Venda (F2 / Esc)</span>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* ─── Recibo pós-venda ──────────────────────────────────────────
+          Antes este modal mostrava só forma de pagamento e total: os itens
+          ficavam de fora e não havia como imprimir nem compartilhar nada.
+          Agora sai o recibo completo, igual ao do fechamento de comanda. */}
+      <ReceiptDialog
+        open={successModalOpen}
+        onOpenChange={setSuccessModalOpen}
+        title="Venda concluída"
+        storeName={(tenant as any)?.companyName || (tenant as any)?.tradeName}
+        reference={`Pedido #${lastOrder?.orderNumber ?? ''}`}
+        createdAt={lastOrder?.createdAt}
+        items={(lastOrder?.items || []).map((it: any) => {
+          // `??` não resolve aqui: vendas antigas têm `unitPriceCents` = 0
+          // (não null), e 0 passa direto — o recibo mostraria "R$ 0,00 cada".
+          // Com `||` o zero cai para o campo legado `unitPrice`.
+          const unitPriceCents = Number(it.unitPriceCents || it.unitPrice || 0);
+          const quantity = Number(it.quantity ?? 0);
+          return {
+            name: it.product?.name ?? 'Item',
+            quantity,
+            unitPriceCents,
+            subtotalCents: Number(it.totalPrice ?? 0) || Math.round(unitPriceCents * quantity),
+            notes: it.notes ?? null,
+          };
+        })}
+        subtotalCents={lastOrder?.subtotalCents || 0}
+        discountCents={lastOrder?.discountCents || 0}
+        totalCents={lastOrder?.totalCents || 0}
+        paymentMethod={lastOrder?.paymentMethod}
+        extraRows={[
+          ...(lastOrder?.cashGivenCents > 0
+            ? [
+                {
+                  label: 'Valor recebido',
+                  value: `R$ ${(lastOrder.cashGivenCents / 100).toFixed(2)}`,
+                },
+              ]
+            : []),
+          ...(lastOrder?.changeCents > 0
+            ? [{ label: 'Troco', value: `R$ ${(lastOrder.changeCents / 100).toFixed(2)}` }]
+            : []),
+          { label: 'Itens', value: String(lastOrder?.itemCount ?? 0) },
+        ]}
+        closeLabel="Nova venda (F2 / Esc)"
+      />
     </div>
   );
 };

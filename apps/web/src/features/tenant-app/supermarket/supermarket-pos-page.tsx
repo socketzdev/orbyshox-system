@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenant } from '../context/tenant-context';
 import {
@@ -23,6 +24,9 @@ import {
   Receipt,
   FileSpreadsheet,
   Printer,
+  Share2,
+  Download,
+  X,
   Lock,
   XCircle,
   Banknote,
@@ -120,6 +124,7 @@ export const SupermarketPosPage: React.FC = () => {
   const { data: rawProductsData } = useQuery({
     queryKey: ['supermarket-products', slug],
     queryFn: () => apiGet<any>(`/tenant-app/${slug}/products`),
+    refetchInterval: 30000,
   });
 
   const dbProducts = useMemo(() => {
@@ -131,11 +136,13 @@ export const SupermarketPosPage: React.FC = () => {
   const { data: dbCustomers = [] } = useQuery({
     queryKey: ['supermarket-customers', slug],
     queryFn: () => apiGet<any[]>(`/tenant-app/${slug}/customers`),
+    refetchInterval: 30000,
   });
 
   const { data: cashRegisterData, refetch: refetchCashRegister } = useQuery({
     queryKey: ['supermarket-cash-register', slug],
     queryFn: () => apiGet<any>(`/tenant-app/${slug}/cash-register`),
+    refetchInterval: 10000,
   });
 
   const { data: storeSettings } = useQuery({
@@ -231,6 +238,119 @@ export const SupermarketPosPage: React.FC = () => {
 
   // Thermal Receipt Modal
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  // Liga a cópia do cupom que vive fora do <Dialog>, direto no <body>. O
+  // diálogo usa position:fixed e cortava o cupom longo na impressão.
+  const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
+
+  /**
+   * Corpo do cupom térmico, sem wrapper.
+   *
+   * Renderizado em dois lugares: na tela (dentro do diálogo) e, durante a
+   * impressão, num contêiner no <body> via portal. O diálogo do Radix usa
+   * position:fixed, o que fazia o conteúdo longo ser cortado na primeira
+   * página — saíam só os primeiros itens, sem o total.
+   */
+  const ThermalReceiptBody = () => (
+    <>
+      <div className="text-center font-bold text-xs uppercase tracking-wider">
+        {storeSettings?.storeName || 'SUPERMERCADO MODELO'}
+      </div>
+      <div className="text-center text-[10px] text-muted-foreground print:text-black">
+        {storeSettings?.cnpj ? `CNPJ: ${storeSettings.cnpj}` : 'CNPJ: 12.345.678/0001-90'}
+      </div>
+      {storeSettings?.address && (
+        <div className="text-center text-[10px] text-muted-foreground print:text-black">
+          {storeSettings.address}
+        </div>
+      )}
+      <div className="text-center text-[10px] text-muted-foreground print:text-black">
+        ------------------------------------------------
+      </div>
+      <div className="flex justify-between text-[10px]">
+        <span>CUPOM Nº {String(completedSaleOrder?.orderNumber || '000').padStart(6, '0')}</span>
+        <span>{new Date(completedSaleOrder?.createdAt || Date.now()).toLocaleString('pt-BR')}</span>
+      </div>
+      <div className="text-center text-[10px] text-muted-foreground print:text-black">
+        ------------------------------------------------
+      </div>
+      <div className="space-y-1">
+        {completedSaleOrder?.items?.map((it: any, idx: number) => (
+          <div key={idx} className="flex justify-between text-[10px] receipt-item">
+            <span className="truncate max-w-[170px]">
+              {idx + 1}. {it.name}
+            </span>
+            <span className="shrink-0 font-bold">
+              {it.quantity}
+              {it.unit} x {formatCurrency(it.unitPriceCents)} ={' '}
+              {formatCurrency(it.unitPriceCents * it.quantity)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="text-center text-[10px] text-muted-foreground print:text-black">
+        ------------------------------------------------
+      </div>
+      <div className="flex justify-between">
+        <span>SUBTOTAL:</span>
+        <span>{formatCurrency(completedSaleOrder?.rawSubtotal || 0)}</span>
+      </div>
+      {(completedSaleOrder?.discountAmount || 0) > 0 && (
+        <div className="flex justify-between text-amber-700 font-bold print:text-black">
+          <span>DESCONTO:</span>
+          <span>- {formatCurrency(completedSaleOrder?.discountAmount || 0)}</span>
+        </div>
+      )}
+      {/* A linha só aparece quando houver taxa: o modelo Order não tem
+          esse campo hoje, então nada é exibido nas vendas atuais. */}
+      {(completedSaleOrder?.deliveryFee || 0) > 0 && (
+        <div className="flex justify-between text-[10px]">
+          <span>TAXA DE ENTREGA:</span>
+          <span>{formatCurrency(completedSaleOrder.deliveryFee)}</span>
+        </div>
+      )}
+      <div className="flex justify-between font-bold text-xs pt-1 border-t border-border print:border-black">
+        <span>TOTAL A PAGAR:</span>
+        <span>{formatCurrency(completedSaleOrder?.finalTotal || 0)}</span>
+      </div>
+      <div className="flex justify-between text-[10px]">
+        <span>FORMA DE PAGAMENTO:</span>
+        <span className="font-bold">{completedSaleOrder?.paymentMethod}</span>
+      </div>
+      {completedSaleOrder?.cashGiven > 0 && (
+        <>
+          <div className="flex justify-between text-[10px]">
+            <span>VALOR RECEBIDO:</span>
+            <span>R$ {completedSaleOrder.cashGiven.toFixed(2).replace('.', ',')}</span>
+          </div>
+          <div className="flex justify-between text-[10px]">
+            <span>TROCO:</span>
+            <span>R$ {(completedSaleOrder.changeDue || 0).toFixed(2).replace('.', ',')}</span>
+          </div>
+        </>
+      )}
+      {completedSaleOrder?.customerName && (
+        <div className="flex justify-between text-[10px]">
+          <span>CLIENTE (FIADO):</span>
+          <span className="font-bold">{completedSaleOrder.customerName}</span>
+        </div>
+      )}
+      {completedSaleOrder?.cpf && (
+        <div className="flex justify-between text-[10px]">
+          <span>CPF NA NOTA:</span>
+          <span>{completedSaleOrder.cpf}</span>
+        </div>
+      )}
+      <div className="text-center text-[10px] text-muted-foreground print:text-black">
+        ------------------------------------------------
+      </div>
+      <div className="text-center text-[10px] text-muted-foreground print:text-black italic">
+        {storeSettings?.receiptFooterMessage || 'Obrigado pela preferência! Volte sempre.'}
+      </div>
+      <div className="text-center text-[9px] text-muted-foreground print:text-black">
+        Operador: {completedSaleOrder?.operator || currentUser?.name || 'Caixa 01'}
+      </div>
+    </>
+  );
   const [completedSaleOrder, setCompletedSaleOrder] = useState<any>(null);
   const [isFinalizingSale, setIsFinalizingSale] = useState(false);
 
@@ -595,6 +715,105 @@ export const SupermarketPosPage: React.FC = () => {
     setIsFinalizingSale(false);
   };
 
+  /**
+   * Versão texto do cupom — mesma informação do visor, em formato portátil.
+   * Serve para compartilhar e para baixar, sem depender do layout em tela.
+   */
+  const buildReceiptText = () => {
+    const o = completedSaleOrder;
+    if (!o) return '';
+    const line = '-'.repeat(48);
+    const out: string[] = [];
+
+    out.push(storeSettings?.storeName || 'SUPERMERCADO MODELO');
+    if (storeSettings?.cnpj) out.push(`CNPJ: ${storeSettings.cnpj}`);
+    if (storeSettings?.address) out.push(storeSettings.address);
+    out.push(line);
+    out.push(`CUPOM Nº ${String(o.orderNumber || '000').padStart(6, '0')}`);
+    out.push(new Date(o.createdAt || Date.now()).toLocaleString('pt-BR'));
+    out.push(line);
+
+    (o.items || []).forEach((it: any, i: number) => {
+      out.push(`${i + 1}. ${it.quantity}${it.unit} x ${it.name}`);
+      out.push(
+        `    ${formatCurrency(it.unitPriceCents)} un  =  ${formatCurrency(
+          it.unitPriceCents * it.quantity,
+        )}`,
+      );
+    });
+
+    out.push(line);
+    out.push(`SUBTOTAL: ${formatCurrency(o.rawSubtotal || 0)}`);
+    if ((o.discountAmount || 0) > 0) {
+      out.push(`DESCONTO: - ${formatCurrency(o.discountAmount)}`);
+    }
+    // Hoje o modelo Order não tem taxa de entrega; a linha aparece se existir.
+    if ((o.deliveryFee || 0) > 0) {
+      out.push(`TAXA DE ENTREGA: ${formatCurrency(o.deliveryFee)}`);
+    }
+    out.push(`TOTAL: ${formatCurrency(o.finalTotal || 0)}`);
+    out.push(`PAGAMENTO: ${o.paymentMethod}`);
+
+    if (o.cashGiven > 0) {
+      out.push(`RECEBIDO: R$ ${o.cashGiven.toFixed(2).replace('.', ',')}`);
+      out.push(`TROCO: R$ ${(o.changeDue || 0).toFixed(2).replace('.', ',')}`);
+    }
+    if (o.customerName) out.push(`CLIENTE (FIADO): ${o.customerName}`);
+    if (o.cpf) out.push(`CPF NA NOTA: ${o.cpf}`);
+
+    out.push(line);
+    out.push(storeSettings?.receiptFooterMessage || 'Obrigado pela preferência! Volte sempre.');
+    out.push(`Operador: ${o.operator || currentUser?.name || 'Caixa 01'}`);
+    return out.join('\n');
+  };
+
+  /**
+   * Compartilha o resumo. Usa a Web Share API quando existe (celular) e cai
+   * para a área de transferência no desktop, onde não há share nativo.
+   */
+  const handleShareReceipt = async () => {
+    const text = buildReceiptText();
+    if (!text) return;
+    const orderNumber = completedSaleOrder?.orderNumber ?? '';
+
+    if (typeof navigator !== 'undefined' && (navigator as any).share) {
+      try {
+        await (navigator as any).share({
+          title: `Cupom ${orderNumber}`,
+          text,
+        });
+        return;
+      } catch {
+        // Usuário cancelou o compartilhamento — não é erro, só não faz nada.
+        return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Resumo copiado. Cole onde quiser compartilhar.');
+    } catch {
+      toast.error('Não foi possível compartilhar este resumo.');
+    }
+  };
+
+  /** Baixa o cupom como arquivo de texto. */
+  const handleDownloadReceipt = () => {
+    const text = buildReceiptText();
+    if (!text) return;
+    const orderNumber = String(completedSaleOrder?.orderNumber || '000').padStart(6, '0');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cupom-${orderNumber}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('Cupom baixado.');
+  };
+
   // Sync offline sales
   const handleSyncOfflineSales = async () => {
     if (pendingSyncQueue.length === 0) return;
@@ -735,7 +954,7 @@ export const SupermarketPosPage: React.FC = () => {
             </div>
 
             {/* Table Header */}
-            <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 pb-2">
+            <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 pb-2">
               <div className="col-span-1">Item</div>
               <div className="col-span-2">Código</div>
               <div className="col-span-5">Descrição</div>
@@ -745,7 +964,7 @@ export const SupermarketPosPage: React.FC = () => {
             </div>
 
             {/* Line items container */}
-            <div className="max-h-[380px] overflow-y-auto space-y-1 pr-1 font-mono text-xs">
+            <div className="max-h-[380px] overflow-y-auto space-y-1.5 pr-1 font-mono text-xs">
               {items.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-2xl space-y-2">
                   <Barcode className="w-8 h-8 text-muted-foreground stroke-[1.5]" />
@@ -760,38 +979,42 @@ export const SupermarketPosPage: React.FC = () => {
                 items.map((item, index) => (
                   <div
                     key={index}
-                    className="grid grid-cols-12 gap-2 p-2.5 rounded-xl bg-muted/70 hover:bg-muted/80 border border-border/60 items-center transition group"
+                    className="p-2.5 rounded-xl bg-muted/70 hover:bg-muted/80 border border-border/60 transition group flex flex-col sm:grid sm:grid-cols-12 sm:gap-2 sm:items-center"
                   >
-                    <div className="col-span-1 text-muted-foreground font-bold">
-                      {String(index + 1).padStart(3, '0')}
+                    <div className="flex items-center justify-between sm:contents">
+                      <div className="hidden sm:block sm:col-span-1 text-muted-foreground font-bold">
+                        {String(index + 1).padStart(3, '0')}
+                      </div>
+                      <div className="hidden sm:block sm:col-span-2 text-muted-foreground truncate text-[11px]">
+                        {item.barcode}
+                      </div>
+                      <div className="sm:col-span-5 font-bold text-foreground truncate flex items-center gap-1.5 font-sans min-w-0 pr-2">
+                        {item.isWeighable && (
+                          <span title="Item Pesável de Balança">
+                            <Scale className="w-3 h-3 text-amber-600 shrink-0" />
+                          </span>
+                        )}
+                        <span className="truncate">{item.name}</span>
+                      </div>
+                      <div className="text-right sm:text-center font-bold text-foreground sm:col-span-1 shrink-0">
+                        {item.quantity} {item.unit}
+                      </div>
                     </div>
-                    <div className="col-span-2 text-muted-foreground truncate text-[11px]">
-                      {item.barcode}
-                    </div>
-                    <div className="col-span-5 font-bold text-foreground truncate flex items-center gap-1.5 font-sans">
-                      {item.isWeighable && (
-                        <span title="Item Pesável de Balança">
-                          <Scale className="w-3 h-3 text-amber-600 shrink-0" />
-                        </span>
-                      )}
-                      <span>{item.name}</span>
-                    </div>
-                    <div className="col-span-1 text-center font-bold text-foreground">
-                      {item.quantity} {item.unit}
-                    </div>
-                    <div className="col-span-1 text-right text-muted-foreground">
-                      {formatCurrency(item.unitPriceCents)}
-                    </div>
-                    <div className="col-span-2 text-right font-bold text-foreground flex items-center justify-end gap-1.5">
-                      <span>{formatCurrency(lineTotalCents(item))}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRequestRemoveItem(index)}
-                        title="Cancelar este item (requer PIN da gerência)"
-                        className="opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 p-0.5 transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="flex items-center justify-between mt-1 sm:mt-0 sm:contents pt-1 sm:pt-0 border-t sm:border-0 border-border/30">
+                      <div className="sm:col-span-1 sm:text-right text-muted-foreground text-[11px]">
+                        {formatCurrency(item.unitPriceCents)}
+                      </div>
+                      <div className="sm:col-span-2 text-right font-bold text-foreground flex items-center justify-end gap-1.5">
+                        <span>{formatCurrency(lineTotalCents(item))}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRequestRemoveItem(index)}
+                          title="Cancelar este item (requer PIN da gerência)"
+                          className="opacity-80 sm:opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 p-0.5 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -961,7 +1184,7 @@ export const SupermarketPosPage: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
               <Keyboard className="w-4 h-4 text-muted-foreground" />
-              Atalhos do Teclado no PDV Supermercado
+              Atalhos do Teclado no PDV Universal
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Projetado para operar em velocidade máxima sem uso do mouse
@@ -1681,7 +1904,7 @@ export const SupermarketPosPage: React.FC = () => {
 
       {/* ─── Modal Cupom Térmico / Impressão de Recibo ─── */}
       <Dialog open={isReceiptModalOpen} onOpenChange={setIsReceiptModalOpen}>
-        <DialogContent className="max-w-sm bg-card rounded-3xl p-6 border-border">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm max-h-[92dvh] overflow-y-auto bg-card rounded-3xl p-4 sm:p-6 border-border">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold text-foreground flex items-center gap-2">
               <Printer className="w-4 h-4 text-muted-foreground" />
@@ -1690,101 +1913,52 @@ export const SupermarketPosPage: React.FC = () => {
           </DialogHeader>
 
           {/* Printable thermal receipt view */}
-          <div
-            id="thermal-receipt"
-            className="bg-muted border border-dashed border-border p-4 rounded-xl font-mono text-[11px] text-foreground space-y-2 leading-tight select-text"
-          >
-            <div className="text-center font-bold text-xs uppercase tracking-wider">
-              {storeSettings?.storeName || 'SUPERMERCADO MODELO'}
-            </div>
-            <div className="text-center text-[10px] text-muted-foreground">
-              {storeSettings?.cnpj ? `CNPJ: ${storeSettings.cnpj}` : 'CNPJ: 12.345.678/0001-90'}
-            </div>
-            {storeSettings?.address && (
-              <div className="text-center text-[10px] text-muted-foreground">
-                {storeSettings.address}
-              </div>
-            )}
-            <div className="text-center text-[10px] text-muted-foreground">
-              ------------------------------------------------
-            </div>
-            <div className="flex justify-between text-[10px]">
-              <span>CUPOM Nº {String(completedSaleOrder?.orderNumber || '000').padStart(6, '0')}</span>
-              <span>{new Date(completedSaleOrder?.createdAt || Date.now()).toLocaleString('pt-BR')}</span>
-            </div>
-            <div className="text-center text-[10px] text-muted-foreground">
-              ------------------------------------------------
-            </div>
-            <div className="space-y-1">
-              {completedSaleOrder?.items?.map((it: any, idx: number) => (
-                <div key={idx} className="flex justify-between text-[10px]">
-                  <span className="truncate max-w-[170px]">
-                    {idx + 1}. {it.name}
-                  </span>
-                  <span className="shrink-0 font-bold">
-                    {it.quantity}{it.unit} x {formatCurrency(it.unitPriceCents)} ={' '}
-                    {formatCurrency(it.unitPriceCents * it.quantity)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="text-center text-[10px] text-muted-foreground">
-              ------------------------------------------------
-            </div>
-            <div className="flex justify-between">
-              <span>SUBTOTAL:</span>
-              <span>{formatCurrency(completedSaleOrder?.rawSubtotal || 0)}</span>
-            </div>
-            {(completedSaleOrder?.discountAmount || 0) > 0 && (
-              <div className="flex justify-between text-amber-700 font-bold">
-                <span>DESCONTO:</span>
-                <span>- {formatCurrency(completedSaleOrder?.discountAmount || 0)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold text-xs pt-1 border-t border-border">
-              <span>TOTAL A PAGAR:</span>
-              <span>{formatCurrency(completedSaleOrder?.finalTotal || 0)}</span>
-            </div>
-            <div className="flex justify-between text-[10px]">
-              <span>FORMA DE PAGAMENTO:</span>
-              <span className="font-bold">{completedSaleOrder?.paymentMethod}</span>
-            </div>
-            {completedSaleOrder?.cashGiven > 0 && (
-              <>
-                <div className="flex justify-between text-[10px]">
-                  <span>VALOR RECEBIDO:</span>
-                  <span>R$ {completedSaleOrder.cashGiven.toFixed(2).replace('.', ',')}</span>
-                </div>
-                <div className="flex justify-between text-[10px]">
-                  <span>TROCO:</span>
-                  <span>R$ {(completedSaleOrder.changeDue || 0).toFixed(2).replace('.', ',')}</span>
-                </div>
-              </>
-            )}
-            {completedSaleOrder?.customerName && (
-              <div className="flex justify-between text-[10px]">
-                <span>CLIENTE (FIADO):</span>
-                <span className="font-bold">{completedSaleOrder.customerName}</span>
-              </div>
-            )}
-            {completedSaleOrder?.cpf && (
-              <div className="flex justify-between text-[10px]">
-                <span>CPF NA NOTA:</span>
-                <span>{completedSaleOrder.cpf}</span>
-              </div>
-            )}
-            <div className="text-center text-[10px] text-muted-foreground">
-              ------------------------------------------------
-            </div>
-            <div className="text-center text-[10px] text-muted-foreground italic">
-              {storeSettings?.receiptFooterMessage || 'Obrigado pela preferência! Volte sempre.'}
-            </div>
-            <div className="text-center text-[9px] text-muted-foreground">
-              Operador: {completedSaleOrder?.operator || currentUser?.name || 'Caixa 01'}
-            </div>
+          <div className="bg-muted border border-dashed border-border p-4 rounded-xl font-mono text-[11px] text-foreground space-y-2 leading-tight select-text">
+            {ThermalReceiptBody()}
           </div>
 
+          {/* Botões com área de toque confortável (h-11): o operador usa isso
+              no celular, entre um atendimento e outro. */}
           <DialogFooter className="grid grid-cols-2 gap-2 pt-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setIsPrintingReceipt(true);
+                // Dois rAF: garante que a cópia do cupom já foi movida para o
+                // <body> antes de abrir o diálogo nativo de impressão.
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    window.print();
+                    setIsPrintingReceipt(false);
+                  });
+                });
+              }}
+              className="h-11 bg-primary text-primary-foreground text-xs font-bold rounded-xl gap-1.5"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Imprimir
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleShareReceipt}
+              className="h-11 text-xs font-bold rounded-xl gap-1.5"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              Compartilhar
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadReceipt}
+              className="h-11 text-xs font-bold rounded-xl gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Baixar
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -1792,45 +1966,85 @@ export const SupermarketPosPage: React.FC = () => {
                 setIsReceiptModalOpen(false);
                 barcodeInputRef.current?.focus();
               }}
-              className="text-xs rounded-xl"
+              className="h-11 text-xs font-bold rounded-xl gap-1.5"
             >
-              Nova Venda (Esc)
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                window.print();
-              }}
-              className="bg-primary text-primary-foreground text-xs font-bold rounded-xl gap-1.5"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Imprimir
+              <X className="w-3.5 h-3.5" />
+              Fechar e voltar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Thermal Print CSS */}
+      {/* Cópia impressa do cupom: fora do <Dialog>, direto no <body>, para o
+          navegador imprimir o cupom inteiro em vez de cortar no primeiro
+          item. O portal só existe durante o window.print(). */}
+      {isPrintingReceipt && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              id="thermal-receipt-host"
+              className="hidden print:block bg-white font-mono text-[11px] text-black leading-tight"
+            >
+              <div id="thermal-receipt">{ThermalReceiptBody()}</div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {/* Thermal Print CSS.
+          O cupom é impresso a partir de #thermal-receipt-host, um contêiner
+          direto no <body> (ver o portal acima), porque o <Dialog> usa
+          position:fixed e cortava o conteúdo longo na primeira página.
+          visibility + display:none juntos: só visibility reserva o espaço
+          ocupado pelo conteúdo escondido e saem páginas em branco. */}
       <style>{`
         @media print {
+          @page { margin: 6mm; }
+
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+
           body * {
             visibility: hidden !important;
           }
-          #thermal-receipt, #thermal-receipt * {
+
+          #thermal-receipt-host,
+          #thermal-receipt-host * {
             visibility: visible !important;
           }
+
+          body *:not(#thermal-receipt-host):not(#thermal-receipt-host *) {
+            display: none !important;
+          }
+
+          #thermal-receipt-host {
+            display: block !important;
+          }
+
           #thermal-receipt {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: 80mm !important;
-            margin: 0 !important;
-            padding: 4mm !important;
+            max-width: 80mm !important;
+            margin: 0 auto !important;
+            padding: 2mm !important;
             background: white !important;
             color: black !important;
             border: none !important;
+            border-radius: 0 !important;
             font-size: 11px !important;
             box-shadow: none !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+
+          #thermal-receipt .receipt-item {
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
         }
       `}</style>

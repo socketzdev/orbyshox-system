@@ -19,14 +19,15 @@ import {
   Package,
   Layers,
   FileText,
-  Clock,
   Scissors,
   Store,
   Truck,
   ShoppingCart,
   Receipt,
+  CheckSquare,
 } from 'lucide-react';
 import { apiGet } from '@/lib/api';
+import { BARBERSHOP_TEMPLATES } from '@projeto-saas/shared-types';
 import { useTenant } from '../context/tenant-context';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -38,8 +39,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SupermarketSidebarNav } from './supermarket-sidebar-nav';
+import { UniversalSidebarNav } from './universal-sidebar-nav';
+import { BarbershopVerticalNav } from './barbershop-vertical-nav';
+import { AcademyVerticalNav } from './academy-vertical-nav';
+import { RefrigerationVerticalNav } from './refrigeration-vertical-nav';
 import { OnboardingSetupWizard } from '../components/onboarding-setup-wizard';
+import { MobileBottomNav } from './mobile-bottom-nav';
+import { AiCopilotDrawer } from '@/features/ai/components/ai-copilot-drawer';
 
 // ─── 1. Emblema 4-Quadrantes (Logo) ───────────────────────────────────────────
 const QuadrantLogo: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
@@ -134,23 +140,24 @@ const IconTeam: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) =
 );
 
 export const TenantLayout: React.FC = () => {
-  const { slug, tenant, currentUser, logout, isLoadingTenant } = useTenant();
+  const { slug, tenant, currentUser, logout, isImpersonating, exitImpersonation,
+isLoadingTenant, isWaiter, isKitchen, isAdmin, isCleaning, isCashier, abilities } = useTenant();
   const navigate = useNavigate();
   const location = useLocation();
-  const base = slug ? `/${slug}/app` : '/app';
+  const base = '/app';
 
-  // Collapsible tree groups (sempre fechados ao carregar / logar)
+  // Collapsible tree groups (restaurante aberto por padrão para acesso direto ao salão)
   const [openGroups, setOpenGroups] = useState<{ [k: string]: boolean }>({
     product: false,
     sales: false,
-    restaurant: false,
+    restaurant: true,
     supermarket: false,
     barber: false,
   });
 
   const productGroupOpen = openGroups.product ?? false;
   const salesGroupOpen = openGroups.sales ?? false;
-  const restaurantGroupOpen = openGroups.restaurant ?? false;
+  const restaurantGroupOpen = openGroups.restaurant ?? true;
   const supermarketGroupOpen = openGroups.supermarket ?? false;
   const barberGroupOpen = openGroups.barber ?? false;
   const setProductGroupOpen = (v: boolean) => setOpenGroups((g) => ({ ...g, product: v }));
@@ -158,6 +165,19 @@ export const TenantLayout: React.FC = () => {
   const setRestaurantGroupOpen = (v: boolean) => setOpenGroups((g) => ({ ...g, restaurant: v }));
   const setSupermarketGroupOpen = (v: boolean) => setOpenGroups((g) => ({ ...g, supermarket: v }));
   const setBarberGroupOpen = (v: boolean) => setOpenGroups((g) => ({ ...g, barber: v }));
+
+  useEffect(() => {
+    const p = location.pathname;
+    if (
+      p.includes('/tables') ||
+      p.includes('/kds') ||
+      p.includes('/recipes') ||
+      p.includes('/tips') ||
+      p.includes('/purchase-notes')
+    ) {
+      setRestaurantGroupOpen(true);
+    }
+  }, [location.pathname]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -170,24 +190,29 @@ export const TenantLayout: React.FC = () => {
   const setSupermarketGroup = (key: string, v: boolean) =>
     setSupermarketGroups((g) => ({ ...g, [key]: v }));
 
-  // Assistente de Primeiro Acesso ("Vamos te ajudar a configurar a sua empresa")
+  const [verticalGroups, setVerticalGroups] = useState<Record<string, boolean>>({});
+  const setVerticalGroup = (key: string, v: boolean) =>
+    setVerticalGroups((g) => ({ ...g, [key]: v }));
+
+  // Sub-template da barbearia (BARBEARIA usa o menu nativo; demais verticais
+  // ganham o próprio menu em BarbershopVerticalNav — ACADEMIA tem o menu
+  // fitness próprio em AcademyVerticalNav).
+  const barberSubcat = useMemo(() => {
+    const tenantNiche = String(tenant?.niche || 'BARBERSHOP').toUpperCase();
+    if (tenantNiche !== 'BARBERSHOP') return '';
+    const raw = String((tenant as any)?.company?.category || (tenant as any)?.category || '').toUpperCase();
+    return ['SALAO_FEMININO', 'REFRIGERACAO', 'GRAFICA', 'INTERNET', 'LOJA_ROUPA', 'ACADEMIA'].includes(raw) ? raw : '';
+  }, [tenant]);
+
+  // Assistente de Primeiro Acesso (Desativado: configuração realizada pelo SuperAdmin na criação da empresa)
   const [showOnboarding, setShowOnboarding] = useState(false);
-
-  useEffect(() => {
-    const isOwnerOrAdmin = currentUser?.role === 'TENANT_ADMIN' || currentUser?.role === 'SUPER_ADMIN';
-    const isRestaurant = tenant?.niche === 'RESTAURANT';
-    const setupNotDone = tenant?.company && tenant.company.branding?.setupCompleted === false;
-
-    if (isOwnerOrAdmin && isRestaurant && setupNotDone) {
-      setShowOnboarding(true);
-    }
-  }, [currentUser?.role, tenant?.company, tenant?.niche]);
 
   // Load products to compute low stock count
   const { data: productsData } = useQuery({
     queryKey: ['pos-products', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/products`),
     enabled: Boolean(slug),
+    refetchInterval: 30000,
   });
 
   const lowStockCount = useMemo(() => {
@@ -200,27 +225,41 @@ export const TenantLayout: React.FC = () => {
   const niche = tenant?.niche || 'BARBERSHOP';
   const features = useMemo(() => tenant?.features || [], [tenant?.features]);
 
-  // Feature-driven checks
-  const isSupermarket = niche === 'SUPERMARKET';
-  const hasBarberFeatures = features.includes('appointments') || features.includes('barbers') || niche === 'BARBERSHOP';
-  const hasRestaurantFeatures = features.includes('tables') || features.includes('kds') || features.includes('recipes') || niche === 'RESTAURANT';
-  const hasSupermarketFeatures = features.includes('pos_fast') || features.includes('stock_batches') || features.includes('xml_import') || isSupermarket;
+  // Robust restaurant detection: o nicho manda. A heurística de categoria só
+  // vale para nicho desconhecido/legado — antes, uma barbearia com categoria
+  // errada (ex.: BURGER_HOUSE) caía no painel de restaurante.
+  const KNOWN_NICHES = ['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL'];
+  const isRestaurant =
+    niche === 'RESTAURANT' ||
+    ((!KNOWN_NICHES.includes(niche)) && ['JAPANESE', 'BURGER_HOUSE', 'PIZZERIA', 'PASTRY', 'RESTAURANT'].includes(
+      String(tenant?.niche || (tenant as any)?.category || (tenant as any)?.company?.category || '').toUpperCase()
+    )) ||
+    features.includes('tables') ||
+    features.includes('kds');
+
+  // Feature-driven checks (se for restaurante, NUNCA exibe módulos das outras verticais)
+  const isSupermarket = !isRestaurant && (niche === 'SUPERMARKET' || niche === 'UNIVERSAL');
+  const isBarbershop = !isRestaurant && niche === 'BARBERSHOP';
+  const hasBarberFeatures = !isRestaurant && (features.includes('appointments') || features.includes('barbers') || isBarbershop);
+  const hasRestaurantFeatures = isRestaurant;
+  const hasSupermarketFeatures = !isRestaurant && (features.includes('pos_fast') || features.includes('stock_batches') || features.includes('xml_import') || features.includes('pos') || isSupermarket);
 
   // Dynamic Page Title
   const pageTitle = useMemo(() => {
     const p = location.pathname;
     if (p.endsWith('/dashboard') || p === `${base}` || p === '/app') return 'Visão Geral Operacional';
-    if (p.includes('/products')) return 'Catálogo & Estoque';
+    if (p.includes('/products')) return isRestaurant ? 'Cardápio & Pratos' : 'Catálogo & Estoque';
     if (p.includes('/supermarket-pos')) return 'PDV de Alta Velocidade';
-    if (p.includes('/pos')) return 'Frente de Caixa (PDV)';
+    if (p.includes('/pos')) return isRestaurant ? 'Caixa do Salão' : 'Frente de Caixa (PDV)';
     if (p.includes('/orders')) return 'Histórico de Vendas';
     if (p.includes('/customers')) return 'Clientes & CRM';
     if (p.includes('/finance')) return 'Caixa & Financeiro';
     if (p.includes('/automations')) return 'Automações Inteligentes';
     if (p.includes('/appointments')) return 'Agenda & Horários';
     if (p.includes('/barbers')) return 'Equipe & Comissões';
-    if (p.includes('/tables')) return 'Mapa de Salão & Gestão de Mesas';
+    if (p.includes('/tables')) return isWaiter ? 'Mesas' : 'Mapa de Salão & Gestão de Mesas';
     if (p.includes('/kds')) return 'Cozinha em Tempo Real (KDS)';
+    if (p.includes('/tips')) return 'Caixa 10%';
     if (p.includes('/recipes')) return 'Fichas Técnicas & CMV';
     if (p.includes('/purchase-notes')) return 'Notas de Compra';
     if (p.includes('/xml-import')) return 'Entrada de NF-e (XML)';
@@ -236,32 +275,65 @@ export const TenantLayout: React.FC = () => {
     return 'Painel ERP';
   }, [location.pathname, base]);
 
+  const restaurantSpecialtyLabel = useMemo(() => {
+    const rawCat = String(
+      (tenant as any)?.company?.category ||
+      (tenant as any)?.category ||
+      (tenant as any)?.company?.branding?.category ||
+      ''
+    ).toUpperCase();
+    if (rawCat === 'JAPANESE') return 'Culinária Japonesa & Sushi';
+    if (rawCat === 'BURGER_HOUSE') return 'Hamburgueria Artesanal';
+    if (rawCat === 'PIZZERIA') return 'Pizzaria & Forno';
+    if (rawCat === 'PASTRY') return 'Pastelaria & Lanchonete';
+    return 'Restaurante & Gastronomia';
+  }, [tenant]);
+
+  const barbershopSpecialtyLabel = useMemo(() => {
+    const rawCat = String(
+      (tenant as any)?.company?.category || (tenant as any)?.category || ''
+    ).toUpperCase();
+    const tpl = (BARBERSHOP_TEMPLATES as Record<string, { label: string }>)[rawCat];
+    return tpl ? tpl.label : 'Barbearia & Estética';
+  }, [tenant]);
+
   if (isLoadingTenant) {
     return (
-      <div className="min-h-screen w-full bg-[#f4f5f7] flex items-center justify-center font-sans text-zinc-400 text-sm">
+      <div className="min-h-[100dvh] w-full bg-[#f4f5f7] flex items-center justify-center font-sans text-zinc-400 text-sm">
         Carregando painel operacional...
       </div>
     );
   }
 
   const isDashboard =
+    location.pathname.endsWith('/dashboard') ||
     location.pathname === `${base}/dashboard` ||
     location.pathname === base ||
+    location.pathname === `${base}/` ||
     location.pathname === '/app';
 
   const renderSidebar = (onNav?: () => void) => (
-    <aside className="w-[260px] h-screen p-5 lg:p-6 flex flex-col justify-between shrink-0 select-none bg-[#f4f5f7] font-sans border-r border-transparent">
+    <aside className="w-[260px] h-[100dvh] p-5 lg:p-6 flex flex-col justify-between shrink-0 select-none bg-[#f4f5f7] font-sans border-r border-transparent">
       <div className="overflow-y-auto pr-1 scrollbar-none">
         {/* ─── Top Left Logo & Tenant Info ─── */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <QuadrantLogo className="w-9 h-9" />
+            {/* Logo do estabelecimento quando houver; senão, a marca do sistema. */}
+            {tenant?.company?.branding?.logoUrl ? (
+              <img
+                src={tenant.company.branding.logoUrl}
+                alt={`Logo de ${companyName}`}
+                className="w-9 h-9 rounded-xl object-contain bg-white border border-zinc-200/80 shrink-0"
+              />
+            ) : (
+              <QuadrantLogo className="w-9 h-9" />
+            )}
             <div className="min-w-0">
               <span className="font-bold text-sm text-zinc-900 tracking-tight block truncate">
                 {companyName}
               </span>
               <span className="text-[10px] text-zinc-400 font-semibold tracking-wider uppercase block">
-                {niche === 'RESTAURANT' ? 'Restaurante / Gastro' : niche === 'BARBERSHOP' ? 'Barbearia' : 'Supermercado'}
+                {isRestaurant ? restaurantSpecialtyLabel : isBarbershop ? barbershopSpecialtyLabel : 'Universal'}
               </span>
             </div>
           </div>
@@ -311,12 +383,384 @@ export const TenantLayout: React.FC = () => {
 
         {/* ─── Menu Navigation ─── */}
         <nav className="space-y-1">
-          {isSupermarket ? (
-            <SupermarketSidebarNav
+          {isWaiter ? (
+            <div className="space-y-1.5">
+              <div className="px-3 py-1 text-[11px] font-bold text-orange-600 uppercase tracking-wider flex items-center gap-1.5">
+                <UtensilsCrossed className="w-3.5 h-3.5" />
+                Área do Garçom
+              </div>
+
+              {abilities.canViewTables && (
+              <NavLink
+                to={`${base}/tables`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <UtensilsCrossed className="w-4 h-4 text-orange-600 shrink-0" />
+                  <span>Mapa de Mesas</span>
+                </div>
+                <span className="text-[9px] bg-orange-100 text-orange-800 font-bold px-1.5 py-0.5 rounded">
+                  Salão
+                </span>
+              </NavLink>
+              )}
+
+              {abilities.canViewKds && (
+              <NavLink
+                to={`${base}/kds`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Flame className="w-4 h-4 text-orange-600 shrink-0" />
+                  <span>Cozinha (KDS)</span>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              </NavLink>
+              )}
+
+              {abilities.canViewPos && (
+              <NavLink
+                to={`${base}/pos`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Receipt className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Caixa do Salão (PDV)</span>
+                </div>
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                  PDV
+                </span>
+              </NavLink>
+              )}
+
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/tasks`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Minhas Tarefas</span>
+                </div>
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                  Rotinas
+                </span>
+              </NavLink>
+              )}
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/calendar`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span>Calendário</span>
+                </div>
+                <span className="text-[9px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+                  Agenda
+                </span>
+              </NavLink>
+              )}
+            </div>
+          ) : isKitchen ? (
+            <div className="space-y-1.5">
+              <div className="px-3 py-1 text-[11px] font-bold text-orange-600 uppercase tracking-wider flex items-center gap-1.5">
+                <ChefHat className="w-3.5 h-3.5" />
+                Área da Cozinha
+              </div>
+
+              {abilities.canViewKds && (
+              <NavLink
+                to={`${base}/kds`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Flame className="w-4 h-4 text-orange-600 shrink-0" />
+                  <span>Cozinha em Tempo Real</span>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              </NavLink>
+              )}
+
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/tasks`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Tarefas da Cozinha</span>
+                </div>
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                  Rotinas
+                </span>
+              </NavLink>
+              )}
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/calendar`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span>Calendário</span>
+                </div>
+                <span className="text-[9px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+                  Agenda
+                </span>
+              </NavLink>
+              )}
+
+              {abilities.canViewPurchaseNotes && (
+              <NavLink
+                to={`${base}/purchase-notes`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <ShoppingCart className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Notas de Compra</span>
+                </div>
+                <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                  Reposição
+                </span>
+              </NavLink>
+              )}
+            </div>
+          ) : isCleaning ? (
+            <div className="space-y-1.5">
+              <div className="px-3 py-1 text-[11px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
+                <CheckSquare className="w-3.5 h-3.5" />
+                Serviços Gerais
+              </div>
+
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/tasks`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Minhas Rotinas</span>
+                </div>
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                  Limpeza
+                </span>
+              </NavLink>
+              )}
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/calendar`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span>Calendário</span>
+                </div>
+                <span className="text-[9px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+                  Agenda
+                </span>
+              </NavLink>
+              )}
+            </div>
+          ) : isCashier ? (
+            <div className="space-y-1.5">
+              <div className="px-3 py-1 text-[11px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
+                <Receipt className="w-3.5 h-3.5" />
+                Frente de Caixa
+              </div>
+
+              {abilities.canViewPos && (
+              <NavLink
+                to={`${base}/pos`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Receipt className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>PDV</span>
+                </div>
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                  Caixa
+                </span>
+              </NavLink>
+              )}
+
+              {abilities.canViewTables && (
+              <NavLink
+                to={`${base}/tables`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <UtensilsCrossed className="w-4 h-4 text-orange-600 shrink-0" />
+                  <span>Mapa de Mesas</span>
+                </div>
+                <span className="text-[9px] bg-orange-100 text-orange-800 font-bold px-1.5 py-0.5 rounded">
+                  Salão
+                </span>
+              </NavLink>
+              )}
+
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/tasks`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Minhas Tarefas</span>
+                </div>
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                  Rotinas
+                </span>
+              </NavLink>
+              )}
+              {abilities.canViewTasks && (
+              <NavLink
+                to={`${base}/calendar`}
+                onClick={onNav}
+                className={({ isActive }) =>
+                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[13px] transition-all ${
+                    isActive
+                      ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                  }`
+                }
+              >
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span>Calendário</span>
+                </div>
+                <span className="text-[9px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+                  Agenda
+                </span>
+              </NavLink>
+              )}
+            </div>
+          ) : isSupermarket ? (
+            <UniversalSidebarNav
               slug={slug}
               onNav={onNav}
               groups={supermarketGroups}
               setGroup={setSupermarketGroup}
+            />
+          ) : barberSubcat === 'ACADEMIA' ? (
+            <AcademyVerticalNav
+              features={features}
+              onNav={onNav}
+              groups={verticalGroups}
+              setGroup={setVerticalGroup}
+            />
+          ) : barberSubcat === 'REFRIGERACAO' ? (
+            <RefrigerationVerticalNav
+              features={features}
+              onNav={onNav}
+              groups={verticalGroups}
+              setGroup={setVerticalGroup}
+            />
+          ) : barberSubcat ? (
+            <BarbershopVerticalNav
+              subcat={barberSubcat}
+              features={features}
+              onNav={onNav}
+              groups={verticalGroups}
+              setGroup={setVerticalGroup}
             />
           ) : (
             <>
@@ -397,26 +841,9 @@ export const TenantLayout: React.FC = () => {
                     </NavLink>
                   </div>
 
-                  {/* Painel do Garçom */}
-                  <div className="relative flex items-center">
-                    <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
-                    <NavLink
-                      to={`${base}/waiter`}
-                      onClick={onNav}
-                      className={({ isActive }) =>
-                        `w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] transition-all ${
-                          isActive
-                            ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
-                            : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
-                        }`
-                      }
-                    >
-                      <span>Painel do Garçom</span>
-                      <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded">
-                        Salão
-                      </span>
-                    </NavLink>
-                  </div>
+                  {/* "Painel do Garçom" (rota /waiter) removido: duplicava o Mapa
+                      de Salão & Gestão de Mesas (/tables), que é a tela inicial
+                      do garçom e já cobre todas as ações do salão. */}
 
                   {/* Ficha Técnica & CMV */}
                   <div className="relative flex items-center">
@@ -456,6 +883,50 @@ export const TenantLayout: React.FC = () => {
                       </span>
                     </NavLink>
                   </div>
+
+                  {/* Tarefas & Rotinas */}
+                  <div className="relative flex items-center">
+                    <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
+                    <NavLink
+                      to={`${base}/tasks`}
+                      onClick={onNav}
+                      className={({ isActive }) =>
+                        `w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] transition-all ${
+                          isActive
+                            ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                            : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                        }`
+                      }
+                    >
+                      <span>Tarefas & Rotinas</span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                        Rotinas
+                      </span>
+                    </NavLink>
+                  </div>
+
+                  {/* Caixa 10% (dono/gerente) */}
+                  {abilities.canManageTips && (
+                    <div className="relative flex items-center">
+                      <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
+                      <NavLink
+                        to={`${base}/tips`}
+                        onClick={onNav}
+                        className={({ isActive }) =>
+                          `w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] transition-all ${
+                            isActive
+                              ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                              : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                          }`
+                        }
+                      >
+                        <span>Caixa 10%</span>
+                        <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                          Gorjetas
+                        </span>
+                      </NavLink>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -541,7 +1012,7 @@ export const TenantLayout: React.FC = () => {
             </div>
           )}
 
-          {/* ─── VERTICAL SUPERMERCADO & VAREJO ─── */}
+          {/* ─── VERTICAL UNIVERSAL ─── */}
           {hasSupermarketFeatures && (
             <div className="pt-2">
               <button
@@ -551,7 +1022,7 @@ export const TenantLayout: React.FC = () => {
               >
                 <div className="flex items-center gap-3">
                   <Store className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="font-semibold text-zinc-900">Supermercado</span>
+                  <span className="font-semibold text-zinc-900">Universal</span>
                 </div>
                 {supermarketGroupOpen ? (
                   <ChevronUp className="w-3.5 h-3.5 text-zinc-500 stroke-[2]" />
@@ -649,7 +1120,7 @@ export const TenantLayout: React.FC = () => {
           {/* ─── DIVISOR DE MÓDULOS ─── */}
           <div className="my-2 border-t border-zinc-200/50 mx-3" />
 
-          {/* Catálogo Geral & Estoque */}
+          {/* Catálogo Geral & Estoque (ou Cardápio & Pratos para Restaurante) */}
           <div className="pt-0.5">
             <button
               type="button"
@@ -658,7 +1129,9 @@ export const TenantLayout: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <IconProducts className="w-4 h-4 text-zinc-700 shrink-0" />
-                <span className="font-semibold text-zinc-900">Catálogo & Estoque</span>
+                <span className="font-semibold text-zinc-900">
+                  {isRestaurant ? 'Cardápio & Pratos' : 'Catálogo & Estoque'}
+                </span>
               </div>
               {productGroupOpen ? (
                 <ChevronUp className="w-3.5 h-3.5 text-zinc-500 stroke-[2]" />
@@ -684,54 +1157,58 @@ export const TenantLayout: React.FC = () => {
                       }`
                     }
                   >
-                    <span>Catálogo de Itens</span>
+                    <span>{isRestaurant ? 'Cardápio de Pratos & Bebidas' : 'Catálogo de Itens'}</span>
                   </NavLink>
                 </div>
 
-                <div className="relative flex items-center">
-                  <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
-                  <NavLink
-                    to={`${base}/products`}
-                    onClick={onNav}
-                    className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium transition-all"
-                  >
-                    <span>Em Reposição</span>
-                    {lowStockCount > 0 ? (
-                      <span className="bg-[#ffded5] text-[#f25c3b] font-bold text-xs rounded-xl px-2 py-0.5 leading-none">
-                        {lowStockCount}
-                      </span>
-                    ) : (
-                      <span className="bg-zinc-100 text-zinc-400 text-[10px] px-1.5 py-0.5 rounded">
-                        0
-                      </span>
-                    )}
-                  </NavLink>
-                </div>
+                {!isRestaurant && (
+                  <div className="relative flex items-center">
+                    <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
+                    <NavLink
+                      to={`${base}/products`}
+                      onClick={onNav}
+                      className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium transition-all"
+                    >
+                      <span>Em Reposição</span>
+                      {lowStockCount > 0 ? (
+                        <span className="bg-[#ffded5] text-[#f25c3b] font-bold text-xs rounded-xl px-2 py-0.5 leading-none">
+                          {lowStockCount}
+                        </span>
+                      ) : (
+                        <span className="bg-zinc-100 text-zinc-400 text-[10px] px-1.5 py-0.5 rounded">
+                          0
+                        </span>
+                      )}
+                    </NavLink>
+                  </div>
+                )}
 
-                <div className="relative flex items-center">
-                  <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
-                  <NavLink
-                    to={`${base}/purchase-notes`}
-                    onClick={onNav}
-                    className={({ isActive }) =>
-                      `w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] transition-all ${
-                        isActive
-                          ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
-                          : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
-                      }`
-                    }
-                  >
-                    <span>Notas de Compra</span>
-                    <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
-                      Reposição
-                    </span>
-                  </NavLink>
-                </div>
+                {!isRestaurant && (
+                  <div className="relative flex items-center">
+                    <div className="absolute -left-[17px] top-0 h-[17px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-[#dce1e6] rounded-bl-[10px] pointer-events-none" />
+                    <NavLink
+                      to={`${base}/purchase-notes`}
+                      onClick={onNav}
+                      className={({ isActive }) =>
+                        `w-full flex items-center justify-between px-3.5 py-1.5 rounded-2xl text-[12.5px] transition-all ${
+                          isActive
+                            ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                            : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/60 font-medium'
+                        }`
+                      }
+                    >
+                      <span>Notas de Compra</span>
+                      <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                        Reposição
+                      </span>
+                    </NavLink>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Vendas & PDV Base */}
+          {/* Vendas & PDV Base (ou Vendas & Salão para Restaurante) */}
           <div className="pt-0.5">
             <button
               type="button"
@@ -740,7 +1217,9 @@ export const TenantLayout: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <IconPos className="w-4 h-4 text-zinc-700 shrink-0" />
-                <span className="font-semibold text-zinc-900">Vendas & PDV</span>
+                <span className="font-semibold text-zinc-900">
+                  {isRestaurant ? 'Vendas & Salão' : 'Vendas & PDV'}
+                </span>
               </div>
               {salesGroupOpen ? (
                 <ChevronUp className="w-3.5 h-3.5 text-zinc-500 stroke-[2]" />
@@ -766,9 +1245,9 @@ export const TenantLayout: React.FC = () => {
                       }`
                     }
                   >
-                    <span>Frente de Caixa</span>
+                    <span>{isRestaurant ? 'Caixa do Salão' : 'Frente de Caixa'}</span>
                     <span className="bg-[#d8f8e8] text-[#1bb768] font-bold text-xs rounded-xl px-2 py-0.5 leading-none">
-                      PDV
+                      {isRestaurant ? 'Caixa' : 'PDV'}
                     </span>
                   </NavLink>
                 </div>
@@ -786,7 +1265,7 @@ export const TenantLayout: React.FC = () => {
                       }`
                     }
                   >
-                    <span>Histórico Vendas</span>
+                    <span>{isRestaurant ? 'Histórico de Pedidos' : 'Histórico Vendas'}</span>
                   </NavLink>
                 </div>
               </div>
@@ -856,6 +1335,49 @@ export const TenantLayout: React.FC = () => {
             <IconTeam className="w-4 h-4 text-zinc-500 shrink-0" />
             <span>Equipe & Funcionários</span>
           </NavLink>
+
+          {/* Tarefas Operacionais (para nichos sem cardápio de restaurante) */}
+          {!hasRestaurantFeatures && (
+            <NavLink
+              to={`${base}/tasks`}
+              onClick={onNav}
+              className={({ isActive }) =>
+                `w-full flex items-center justify-between px-3.5 py-2 rounded-2xl text-[13px] font-medium transition-all ${
+                  isActive
+                    ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                    : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/50'
+                }`
+              }
+            >
+              <div className="flex items-center gap-3">
+                <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Tarefas & Rotinas</span>
+              </div>
+              <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                Rotinas
+              </span>
+            </NavLink>
+          )}
+          {/* Calendário (todas as verticais) */}
+          <NavLink
+            to={`${base}/calendar`}
+            onClick={onNav}
+            className={({ isActive }) =>
+              `w-full flex items-center justify-between px-3.5 py-2 rounded-2xl text-[13px] font-medium transition-all ${
+                isActive
+                  ? 'bg-white text-zinc-900 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                  : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/50'
+              }`
+            }
+          >
+            <div className="flex items-center gap-3">
+              <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+              <span>Calendário</span>
+            </div>
+            <span className="text-[9px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+              Agenda
+            </span>
+          </NavLink>
             </>
           )}
         </nav>
@@ -869,7 +1391,7 @@ export const TenantLayout: React.FC = () => {
               {currentUser?.name || 'Administrador'}
             </span>
             <span className="text-[10px] text-zinc-400 truncate block">
-              {currentUser?.email || 'admin@sistema.com'}
+              {currentUser?.position ? `${currentUser.position} • ` : ''}{currentUser?.email || 'admin@sistema.com'}
             </span>
           </div>
           <button
@@ -886,7 +1408,7 @@ export const TenantLayout: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen w-full bg-[#f4f5f7] flex font-sans antialiased text-zinc-900 selection:bg-zinc-200">
+    <div className="min-h-[100dvh] h-[100dvh] w-full bg-[#f4f5f7] flex font-sans antialiased text-zinc-900 selection:bg-zinc-200">
       {/* ─── Desktop Sidebar ─── */}
       <div className="hidden md:flex flex-col shrink-0">
         {renderSidebar()}
@@ -900,91 +1422,153 @@ export const TenantLayout: React.FC = () => {
       </Sheet>
 
       {/* ─── Main Content ─── */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto px-3.5 sm:px-8 lg:px-10 py-4 sm:py-6">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-1.5 h-9 w-9 text-zinc-700 hover:bg-white rounded-xl"
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111827]">
-              {pageTitle}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {hasRestaurantFeatures && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate(`${base}/kds`)}
-                className="h-9 px-3.5 text-xs font-bold text-orange-800 bg-orange-50 hover:bg-orange-100 border-orange-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
-              >
-                <Flame className="w-3.5 h-3.5 text-orange-600" />
-                <span>KDS Cozinha</span>
-              </Button>
-            )}
-
-            {hasSupermarketFeatures && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate(`${base}/supermarket-pos`)}
-                className="h-9 px-3.5 text-xs font-bold text-blue-800 bg-blue-50 hover:bg-blue-100 border-blue-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
-              >
-                <Barcode className="w-3.5 h-3.5 text-blue-600" />
-                <span>PDV Balança</span>
-              </Button>
-            )}
-
-            {hasBarberFeatures && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(tenant?.slug ? `/${tenant.slug}/agendar` : '#', '_blank')}
-                className="h-9 px-3.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Agendamento Online</span>
-              </Button>
-            )}
-
-            {hasRestaurantFeatures && (currentUser?.role === 'TENANT_ADMIN' || currentUser?.role === 'SUPER_ADMIN') && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowOnboarding(true)}
-                className="h-9 px-3.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
-                title="Configurar Salão e Mesas"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Configurar Salão</span>
-              </Button>
-            )}
-
-            <Button
-              size="sm"
+      {/* Conteúdo em tela cheia no mobile: 100dvh evita o salto da barra de
+          endereço dos navegadores (100vh inclui a barra e corta o rodapé), e
+          `px-0`/`py-0` abaixo de `sm` eliminam as barras laterais — cada página
+          passa a controlar o próprio respiro interno. `pb-20` reserva o espaço
+          da navegação inferior para nada ficar escondido atrás dela. */}
+      <div className={`flex-1 flex flex-col min-w-0 h-[100dvh] overflow-y-auto ${isDashboard ? 'px-0 py-0' : 'px-4 py-4'} sm:px-8 lg:px-10 sm:py-6 pb-20 md:pb-6`}>
+        {/* Faixa de suporte: Super Admin visualizando empresa de cliente */}
+        {isImpersonating && (
+          <div className="mb-3 p-2.5 rounded-2xl bg-indigo-600 text-white flex items-center justify-between gap-2 shadow-md">
+            <p className="text-xs font-bold truncate">
+              Suporte: visualizando <span className="underline">{tenant?.tradeName || tenant?.companyName || slug}</span>
+            </p>
+            <button
+              type="button"
               onClick={() => {
-                if (hasSupermarketFeatures) {
-                  navigate(`${base}/supermarket-pos`);
-                } else if (hasRestaurantFeatures) {
-                  navigate(`${base}/tables`);
-                } else {
-                  navigate(`${base}/pos`);
-                }
+                exitImpersonation();
+                navigate('/tenants');
               }}
-              className="h-9 px-4 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+              className="h-8 px-3 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-black shrink-0 transition cursor-pointer"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>Nova Venda</span>
-            </Button>
+              Voltar ao Super Admin
+            </button>
           </div>
-        </div>
+        )}
+        {/* Header Bar - Ocultado nas páginas de Dashboard pois elas contam com seu próprio cabeçalho integrado */}
+        {!isDashboard && (
+          <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden p-1.5 h-9 w-9 text-zinc-700 hover:bg-white rounded-xl shrink-0"
+              >
+                <Menu className="w-5 h-5" />
+              </Button>
+              <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-[#111827] truncate">
+                {pageTitle}
+              </h1>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {isWaiter ? (
+                <>
+                  {/* Botão "Chamados & Pedidos" (rota /waiter) removido: duplicava
+                      o Mapa de Mesas abaixo, que já recebe os chamados. */}
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`${base}/tables`)}
+                    className="h-9 px-4 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UtensilsCrossed className="w-3.5 h-3.5 text-orange-400" />
+                    <span>Mapa de Mesas</span>
+                  </Button>
+                </>
+              ) : isKitchen ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`${base}/purchase-notes`)}
+                    className="h-9 px-3.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200 rounded-2xl shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Notas de Compra</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`${base}/kds`)}
+                    className="h-9 px-4 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Flame className="w-3.5 h-3.5 text-orange-400" />
+                    <span>KDS Cozinha</span>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {hasRestaurantFeatures && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`${base}/kds`)}
+                      className="h-9 px-3.5 text-xs font-bold text-orange-800 bg-orange-50 hover:bg-orange-100 border-orange-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Flame className="w-3.5 h-3.5 text-orange-600" />
+                      <span>KDS Cozinha</span>
+                    </Button>
+                  )}
+
+                  {hasSupermarketFeatures && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`${base}/supermarket-pos`)}
+                      className="h-9 px-3.5 text-xs font-bold text-blue-800 bg-blue-50 hover:bg-blue-100 border-blue-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Barcode className="w-3.5 h-3.5 text-blue-600" />
+                      <span>PDV Balança</span>
+                    </Button>
+                  )}
+
+                  {hasBarberFeatures && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(tenant?.slug ? `/${tenant.slug}/agendar` : '#', '_blank')}
+                      className="h-9 px-3.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Agendamento Online</span>
+                    </Button>
+                  )}
+
+                  {hasRestaurantFeatures && (currentUser?.role === 'TENANT_ADMIN' || currentUser?.role === 'SUPER_ADMIN') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowOnboarding(true)}
+                      className="h-9 px-3.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200 rounded-2xl shadow-2xs hidden sm:flex items-center gap-1.5 cursor-pointer"
+                      title="Configurar Salão e Mesas"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Configurar Salão</span>
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (hasSupermarketFeatures) {
+                        navigate(`${base}/supermarket-pos`);
+                      } else if (hasRestaurantFeatures) {
+                        navigate(`${base}/tables`);
+                      } else {
+                        navigate(`${base}/pos`);
+                      }
+                    }}
+                    className="h-9 px-4 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    <span>Nova Venda</span>
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Content Outlet */}
         <main className="flex-1">
@@ -992,11 +1576,36 @@ export const TenantLayout: React.FC = () => {
         </main>
       </div>
 
+      {/* ─── Mobile Bottom Navigation (Smartphones & Capacitor) ─── */}
+      <MobileBottomNav
+        base={base}
+        isWaiter={isWaiter}
+        isKitchen={isKitchen}
+        isAdmin={isAdmin}
+        isCleaning={isCleaning}
+        isCashier={isCashier}
+        canViewTables={abilities.canViewTables}
+        canViewKds={abilities.canViewKds}
+        canViewPos={abilities.canViewPos}
+        canViewPurchaseNotes={abilities.canViewPurchaseNotes}
+        canViewTasks={abilities.canViewTasks}
+        onOpenMenu={() => setMobileMenuOpen(true)}
+        onLogout={logout}
+      />
+
       {/* Assistente de Primeiro Acesso ("Vamos te ajudar a configurar a sua empresa") */}
       <OnboardingSetupWizard
         isOpen={showOnboarding}
         onClose={() => setShowOnboarding(false)}
         onSuccess={() => setShowOnboarding(false)}
+      />
+
+      {/* ─── Copiloto de IA Gemini Flutuante (Drawer) ─── */}
+      <AiCopilotDrawer
+        tenantName={tenant?.companyName || 'Restaurante do Gordo'}
+        niche={tenant?.niche || 'RESTAURANT'}
+        scope="TENANT"
+        userName={currentUser?.name || 'Carlos'}
       />
     </div>
   );

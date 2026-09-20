@@ -27,8 +27,15 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     closeClassName?: string;
+    /**
+     * Por padrão o modal NÃO fecha clicando fora (evita perder pagamento,
+     * confirmação ou formulário por toque acidental — regra global do painel).
+     * Passe `allowOutsideClose` para liberar o fechamento pelo backdrop num
+     * caso específico. O Esc e o botão X continuam funcionando.
+     */
+    allowOutsideClose?: boolean;
   }
->(({ className, children, closeClassName, ...props }, ref) => (
+>(({ className, children, closeClassName, allowOutsideClose = false, onPointerDownOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -37,6 +44,10 @@ const DialogContent = React.forwardRef<
         'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-3xl border border-zinc-200/70 bg-white p-6 text-zinc-900 shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         className,
       )}
+      onPointerDownOutside={(e) => {
+        if (!allowOutsideClose) e.preventDefault();
+        onPointerDownOutside?.(e);
+      }}
       {...props}
     >
       {children}

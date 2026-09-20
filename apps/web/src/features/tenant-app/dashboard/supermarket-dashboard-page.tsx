@@ -33,12 +33,10 @@ import { Button } from '@/components/ui/button';
 import { ErpEmptyState } from '../components/erp-empty-state';
 
 const brl = (cents: number) =>
-  (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const fmtMoney = (cents: number) => {
-  if (cents >= 100000) return `R$ ${(cents / 100000).toFixed(1)}k`;
-  return brl(cents);
-};
+/** Moeda sempre por extenso (sem abreviar em "k": valor real na tela). */
+const fmtMoney = (cents: number) => brl(cents);
 
 // Smooth cubic Bézier spline helper
 function getSmoothCurvePath(points: { x: number; y: number }[]) {
@@ -233,11 +231,11 @@ export const SupermarketDashboardPage: React.FC = () => {
   ];
 
   const categoryChart = useMemo(() => {
-    const total = salesByCategory.reduce((sum: number, c: any) => sum + (c.totalCents || 0), 0) || 1;
+    const total = salesByCategory.reduce((sum: number, c: any) => sum + (c.totalCents || 0), 0);
     return salesByCategory.map((c: any, i: number) => ({
-      label: c.category || 'Geral',
+      label: c.category || 'Sem categoria',
       value: c.totalCents || 0,
-      pct: Math.round(((c.totalCents || 0) / total) * 100),
+      pct: total > 0 ? Math.round(((c.totalCents || 0) / total) * 100) : 0,
       color: categoryColors[i % categoryColors.length],
     }));
   }, [salesByCategory]);
@@ -321,11 +319,8 @@ export const SupermarketDashboardPage: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-              {tenant?.tradeName || tenant?.companyName || 'Supermercado Central'}
+              {tenant?.tradeName || tenant?.companyName || 'Minha loja'}
             </h1>
-            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
-              <Sparkles className="w-3 h-3 text-amber-500" /> Varejo & Atacado
-            </span>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground capitalize flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
@@ -366,18 +361,6 @@ export const SupermarketDashboardPage: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Quick Action: Open POS */}
-          <Button
-            onClick={() => navigate(`${base}/supermarket-pos`)}
-            className="h-11 px-5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm flex items-center gap-2"
-          >
-            <ShoppingCart className="w-4 h-4 text-emerald-400" />
-            <span>Frente de Caixa (PDV)</span>
-            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-zinc-800 text-muted-foreground rounded border border-zinc-700">
-              F10
-            </kbd>
-          </Button>
 
           {/* Quick Action: Import XML */}
           <Button
@@ -738,7 +721,7 @@ export const SupermarketDashboardPage: React.FC = () => {
                     <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                       <div
                         className={`h-full bg-gradient-to-r ${cat.color} rounded-full transition-all duration-500`}
-                        style={{ width: `${Math.max(4, cat.pct)}%` }}
+                        style={{ width: `${cat.pct > 0 ? Math.max(4, cat.pct) : 0}%` }}
                       />
                     </div>
                   </div>
@@ -786,8 +769,8 @@ export const SupermarketDashboardPage: React.FC = () => {
             <div className="mt-4 space-y-3">
               {topProducts.length ? (
                 topProducts.slice(0, 5).map((p: any, idx: number) => {
-                  const maxQty = topProducts[0]?.quantity || 1;
-                  const share = Math.round((p.quantity / maxQty) * 100);
+                  const maxQty = Number(topProducts[0]?.quantity || 0);
+                  const share = maxQty > 0 ? Math.round((Number(p.quantity || 0) / maxQty) * 100) : 0;
                   const medals = ['bg-amber-100 text-amber-800 border-amber-200', 'bg-zinc-200 text-foreground border-border', 'bg-orange-100 text-orange-800 border-orange-200'];
                   const medalBadge = medals[idx] || 'bg-muted text-muted-foreground border-border';
 
@@ -862,57 +845,7 @@ export const SupermarketDashboardPage: React.FC = () => {
             </div>
 
             <div className="mt-4 space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-              {expiringSoon.length > 0 ? (
-                expiringSoon.map((b: any) => {
-                  const expiryDate = new Date(b.expiryDate);
-                  const diffDays = Math.ceil(
-                    (expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-                  );
-                  const isUrgent = diffDays <= 5;
-
-                  return (
-                    <div
-                      key={b.id}
-                      className={`p-3 rounded-2xl border transition-all ${
-                        isUrgent
-                          ? 'bg-rose-50 dark:bg-rose-500/10/60 border-rose-200/80'
-                          : 'bg-amber-50 dark:bg-amber-500/10/40 border-amber-200/60'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-foreground truncate">
-                            {b.product?.name || 'Item do lote'}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
-                            <span>Lote: <strong>{b.lotNumber}</strong></span>
-                            {b.currentQuantity !== undefined && (
-                              <span>Qtd: <strong>{b.currentQuantity}</strong></span>
-                            )}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-bold ${
-                            isUrgent ? 'bg-rose-600 text-white' : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {diffDays <= 0 ? 'Vence Hoje' : `${diffDays}d restantes`}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : alerts.length > 0 ? (
-                alerts.map((a: any, i: number) => (
-                  <div
-                    key={i}
-                    className="p-3 rounded-2xl bg-muted border border-border/60 flex items-start gap-2.5"
-                  >
-                    <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                    <p className="text-xs text-foreground leading-snug">{a.message}</p>
-                  </div>
-                ))
-              ) : (
+              {expiringSoon.length === 0 && alerts.length === 0 ? (
                 <div className="py-8">
                   <ErpEmptyState
                     icon={CheckCircle2}
@@ -920,6 +853,62 @@ export const SupermarketDashboardPage: React.FC = () => {
                     description="Nenhum lote próximo ao vencimento nos próximos 15 dias."
                   />
                 </div>
+              ) : (
+                <>
+                  {expiringSoon.map((b: any) => {
+                    const expiryDate = new Date(b.expiryDate);
+                    const diffDays = Math.ceil(
+                      (expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+                    );
+                    const isExpired = diffDays < 0;
+                    const isUrgent = diffDays <= 5;
+
+                    return (
+                      <div
+                        key={b.id}
+                        className={`p-3 rounded-2xl border transition-all ${
+                          isUrgent
+                            ? 'bg-rose-50 dark:bg-rose-500/10/60 border-rose-200/80'
+                            : 'bg-amber-50 dark:bg-amber-500/10/40 border-amber-200/60'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground truncate">
+                              {b.product?.name || 'Item do lote'}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                              <span>Lote: <strong>{b.lotNumber}</strong></span>
+                              {b.quantity !== undefined && b.quantity !== null && (
+                                <span>Qtd: <strong>{b.quantity}</strong></span>
+                              )}
+                            </p>
+                          </div>
+                          <span
+                            className={`shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-bold ${
+                              isExpired
+                                ? 'bg-zinc-900 text-white'
+                                : isUrgent
+                                  ? 'bg-rose-600 text-white'
+                                  : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {isExpired ? 'Vencido' : diffDays === 0 ? 'Vence Hoje' : `${diffDays}d restantes`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {alerts.map((a: any, i: number) => (
+                    <div
+                      key={`alert-${i}`}
+                      className="p-3 rounded-2xl bg-muted border border-border/60 flex items-start gap-2.5"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-foreground leading-snug">{a.message}</p>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           </div>
@@ -964,12 +953,12 @@ export const SupermarketDashboardPage: React.FC = () => {
                       <div className="min-w-0">
                         <p className="font-bold text-foreground truncate">
                           {o.items?.length
-                            ? `${o.items.length} ${o.items.length === 1 ? 'item' : 'itens'}`
+                            ? `${(o.items || []).reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)} un`
                             : 'Venda Caixa'}
                           {o.customer?.name ? ` · ${o.customer.name}` : ''}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
-                          {new Date(o.createdAt).toLocaleTimeString([], {
+                          {new Date(o.createdAt).toLocaleTimeString('pt-BR', {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
@@ -979,7 +968,7 @@ export const SupermarketDashboardPage: React.FC = () => {
 
                     <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
                       <span className="font-mono font-black text-foreground">
-                        {brl(o.totalCents)}
+                        {brl(o.totalCents || 0)}
                       </span>
                       <PaymentMethodBadge method={o.paymentMethod} />
                     </div>

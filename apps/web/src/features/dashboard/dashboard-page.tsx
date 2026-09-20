@@ -6,7 +6,6 @@ import {
   Users,
   Package,
   DollarSign,
-  Calendar,
   ChevronDown,
   Search,
   ArrowUpDown,
@@ -29,6 +28,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiGet } from '@/lib/api';
+import { setViewingSlug } from '@/lib/auth';
+import { BARBERSHOP_TEMPLATES } from '@projeto-saas/shared-types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,11 +40,27 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { CreateTenantModal } from '@/features/tenants/components/create-tenant-modal';
 
-const getNicheBadge = (niche: string) => {
+const getNicheBadge = (niche: string, companyCategory?: string | null) => {
+  if (niche === 'BARBERSHOP' && companyCategory) {
+    const tpl = (BARBERSHOP_TEMPLATES as Record<string, { label: string }>)[String(companyCategory).toUpperCase()];
+    if (tpl) {
+      return {
+        label: tpl.label,
+        color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        icon: <Scissors className="w-3 h-3" />,
+      };
+    }
+  }
   switch (niche) {
     case 'SUPERMARKET':
       return {
-        label: 'Supermercado',
+        label: 'Universal',
+        color: 'bg-sky-50 text-sky-700 border-sky-200',
+        icon: <Store className="w-3 h-3" />,
+      };
+    case 'UNIVERSAL':
+      return {
+        label: 'Universal',
         color: 'bg-sky-50 text-sky-700 border-sky-200',
         icon: <Store className="w-3 h-3" />,
       };
@@ -85,7 +102,6 @@ const getSplinePath = (coords: { x: number; y: number }[]) => {
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const [dateRange, setDateRange] = useState('10 Abr 2026 - 11 Mai 2026');
   const [revenuePeriod, setRevenuePeriod] = useState<'Esta Semana' | 'Este Mês' | 'Este Ano'>('Esta Semana');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [hoveredRevenueIndex, setHoveredRevenueIndex] = useState<number | null>(null);
@@ -113,15 +129,15 @@ export const DashboardPage: React.FC = () => {
 
   const { data: invoicesRes } = useQuery({
     queryKey: ['billing-invoices-dashboard'],
-    queryFn: () => apiGet('/billing/invoices?page=1&pageSize=50').catch(() => ({ data: [] })),
+    queryFn: () => apiGet('/billing/invoices?page=1&limit=100').catch(() => ({ data: [] })),
   });
 
   const { data: tenantsRes } = useQuery({
     queryKey: ['dashboard-tenants-count'],
-    queryFn: () => apiGet('/tenants?page=1&pageSize=50').catch(() => ({ data: [] })),
+    queryFn: () => apiGet('/tenants?page=1&limit=100').catch(() => ({ data: [] })),
   });
 
-  // Lista real de empresas cadastradas no banco
+  // Lista real de empresas cadastradas no banco (vazio mostra vazio).
   const tenantsList = useMemo(() => {
     const raw = Array.isArray(tenantsRes?.data)
       ? tenantsRes.data
@@ -129,114 +145,34 @@ export const DashboardPage: React.FC = () => {
       ? tenantsRes
       : [];
 
-    if (raw.length > 0) {
-      return raw.map((t: any) => ({
-        id: t.id,
-        name: t.tradeName || t.companyName,
-        legalName: t.companyName || t.tradeName,
-        slug: t.slug,
-        niche: t.niche as 'SUPERMARKET' | 'BARBERSHOP' | 'RESTAURANT',
-        status: t.status as 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'SUSPENDED',
-        plan: t.subscription?.plan?.name || (t.niche === 'SUPERMARKET' ? 'Plano Pro Varejo' : 'Plano Pro'),
-        createdAt: t.createdAt,
-        contactEmail: t.email || `contato@${t.slug}.com`,
-      }));
-    }
-
-    // Fallback com as 7 empresas reais do banco
-    return [
-      {
-        id: 't-1',
-        name: 'Mercadinho do Bairro',
-        legalName: 'Mercadinho do Bairro LTDA',
-        slug: 'mercadinho-do-bairro',
-        niche: 'SUPERMARKET' as const,
-        status: 'TRIAL' as const,
-        plan: 'Plano Pro Varejo',
-        createdAt: '2026-09-10',
-        contactEmail: 'gerente@mercadinho.com',
-      },
-      {
-        id: 't-2',
-        name: 'Supermercado Central',
-        legalName: 'Supermercado Central LTDA',
-        slug: 'supermercado-central',
-        niche: 'SUPERMARKET' as const,
-        status: 'TRIAL' as const,
-        plan: 'Plano Pro Varejo',
-        createdAt: '2026-09-08',
-        contactEmail: 'gerente@supermercadocentral.com',
-      },
-      {
-        id: 't-3',
-        name: 'Barbearia Kings',
-        legalName: 'Barbearia Kings LTDA',
-        slug: 'kings-barber',
-        niche: 'BARBERSHOP' as const,
-        status: 'PAST_DUE' as const,
-        plan: 'Plano Starter',
-        createdAt: '2026-08-15',
-        contactEmail: 'contato@kingsbarber.com.br',
-      },
-      {
-        id: 't-4',
-        name: 'Bella Napoli',
-        legalName: 'Pizzaria Bella Napoli LTDA',
-        slug: 'bella-napoli',
-        niche: 'RESTAURANT' as const,
-        status: 'ACTIVE' as const,
-        plan: 'Plano Pro Gastronomia',
-        createdAt: '2026-07-20',
-        contactEmail: 'contato@bellanapoli.com.br',
-      },
-      {
-        id: 't-5',
-        name: 'Economia Total',
-        legalName: 'Mercado Economia Total LTDA',
-        slug: 'economia-total',
-        niche: 'SUPERMARKET' as const,
-        status: 'TRIAL' as const,
-        plan: 'Plano Pro Varejo',
-        createdAt: '2026-09-01',
-        contactEmail: 'contato@economiatotal.com.br',
-      },
-      {
-        id: 't-6',
-        name: 'Barbearia Dom Corte',
-        legalName: 'Barbearia Dom Corte LTDA',
-        slug: 'dom-corte',
-        niche: 'BARBERSHOP' as const,
-        status: 'ACTIVE' as const,
-        plan: 'Plano Pro',
-        createdAt: '2026-06-10',
-        contactEmail: 'contato@domcorte.com.br',
-      },
-      {
-        id: 't-7',
-        name: 'Restaurante Sabor & Arte',
-        legalName: 'Restaurante Sabor & Arte LTDA',
-        slug: 'sabor-arte',
-        niche: 'RESTAURANT' as const,
-        status: 'ACTIVE' as const,
-        plan: 'Plano Enterprise',
-        createdAt: '2026-05-18',
-        contactEmail: 'contato@saborarte.com.br',
-      },
-    ];
+    return raw.map((t: any) => ({
+      id: t.id,
+      name: t.tradeName || t.companyName,
+      legalName: t.companyName || t.tradeName,
+      slug: t.slug,
+      niche: t.niche as 'SUPERMARKET' | 'UNIVERSAL' | 'BARBERSHOP' | 'RESTAURANT',
+      companyCategory: (t as any).companyCategory || null,
+      status: t.status as 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'SUSPENDED',
+      plan: t.subscription?.plan?.name || 'Sem plano',
+      createdAt: t.createdAt,
+      contactEmail: t.email || '—',
+    }));
   }, [tenantsRes]);
 
-  // Métricas Consolidadas Reais
+  // Métricas consolidadas reais (zero/vazio mostra zero/vazio, sem fallback fake).
   const totalTenantsCount = tenantsList.length;
 
   const delinquentCount = useMemo(() => {
-    return Array.isArray(delinquencyList) ? delinquencyList.length : 1;
+    return Array.isArray(delinquencyList) ? delinquencyList.length : 0;
   }, [delinquencyList]);
 
   const overdueInvoicesCount = useMemo(() => {
     const invs = Array.isArray(invoicesRes?.data) ? invoicesRes.data : [];
-    const count = invs.filter((i: any) => i.status === 'OVERDUE').length;
-    return count > 0 ? count : 1;
+    return invs.filter((i: any) => i.status === 'OVERDUE').length;
   }, [invoicesRes]);
+
+  const fmtBRL = (cents: number) =>
+    (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const totalRevenueFormatted = useMemo(() => {
     if (kpis?.mrr) {
@@ -251,7 +187,7 @@ export const DashboardPage: React.FC = () => {
         currency: 'BRL',
       });
     }
-    return 'R$ 897,00';
+    return '—';
   }, [billingOverview, kpis]);
 
   const previousRevenueFormatted = useMemo(() => {
@@ -261,84 +197,124 @@ export const DashboardPage: React.FC = () => {
         currency: 'BRL',
       });
     }
-    return 'R$ 597,00';
+    return '—';
   }, [billingOverview]);
 
-  // Contagem por nicho
+  // Quebra real por status + movimento do mês (p/ badges e subtítulos).
+  const statusBreakdown = useMemo(() => {
+    const active = tenantsList.filter((t: any) => t.status === 'ACTIVE').length;
+    const trial = tenantsList.filter((t: any) => t.status === 'TRIAL').length;
+    const late = tenantsList.filter((t: any) => t.status === 'PAST_DUE' || t.status === 'SUSPENDED').length;
+    const suspended = tenantsList.filter((t: any) => t.status === 'SUSPENDED').length;
+    return { active, trial, late, suspended };
+  }, [tenantsList]);
+
+  const tenantMonthStats = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const thisMonth = tenantsList.filter((t: any) => new Date(t.createdAt) >= start).length;
+    const prevMonth = tenantsList.filter((t: any) => {
+      const d = new Date(t.createdAt);
+      return d >= prevStart && d < start;
+    }).length;
+    const growth = prevMonth > 0 ? Math.round(((thisMonth - prevMonth) / prevMonth) * 100) : thisMonth > 0 ? 100 : 0;
+    const monthName = now.toLocaleDateString('pt-BR', { month: 'long' });
+    const monthCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    return { thisMonth, prevMonth, growth, monthName: monthCap };
+  }, [tenantsList]);
+
+  // Dias em atraso por empresa (p/ selo real de inadimplência).
+  const delinqDaysByTenant = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (Array.isArray(delinquencyList)) {
+      for (const d of delinquencyList as any[]) {
+        const days = Number(d.daysOverdue || 0);
+        if (d.tenant?.email) map[`mail:${d.tenant.email}`] = days;
+        if (d.tenant?.companyName) map[`name:${d.tenant.companyName}`] = days;
+      }
+    }
+    return map;
+  }, [delinquencyList]);
+
+  // Contagem por nicho (zeros honestos quando a base está vazia).
   const nicheStats = useMemo(() => {
-    const superCount = tenantsList.filter((t: any) => t.niche === 'SUPERMARKET').length;
+    const superCount = tenantsList.filter((t: any) => t.niche === 'SUPERMARKET' || t.niche === 'UNIVERSAL').length;
     const barberCount = tenantsList.filter((t: any) => t.niche === 'BARBERSHOP').length;
     const restCount = tenantsList.filter((t: any) => t.niche === 'RESTAURANT').length;
-    const total = tenantsList.length || 1;
+    const total = tenantsList.length;
 
     return {
-      supermarket: { count: superCount, pct: Math.round((superCount / total) * 100) },
-      barbershop: { count: barberCount, pct: Math.round((barberCount / total) * 100) },
-      restaurant: { count: restCount, pct: Math.round((restCount / total) * 100) },
+      supermarket: { count: superCount, pct: total > 0 ? Math.round((superCount / total) * 100) : 0 },
+      barbershop: { count: barberCount, pct: total > 0 ? Math.round((barberCount / total) * 100) : 0 },
+      restaurant: { count: restCount, pct: total > 0 ? Math.round((restCount / total) * 100) : 0 },
     };
   }, [tenantsList]);
 
-  // ─── Crescimento Real de Clientes (Base Acumulada e Novos por Mês - CLEAN) ───
-  const clientGrowthData = useMemo(() => {
-    return [
-      {
-        month: 'Mai',
-        fullMonth: 'Maio 2026',
-        cumulative: 1,
-        newClients: 1,
-        names: ['Barbearia Retrô'],
-        retention: '100%',
-        growthRate: 'Início',
-      },
-      {
-        month: 'Jun',
-        fullMonth: 'Junho 2026',
-        cumulative: 2,
-        newClients: 1,
-        names: ['Café Gourmet'],
-        retention: '100%',
-        growthRate: '+100%',
-      },
-      {
-        month: 'Jul',
-        fullMonth: 'Julho 2026',
-        cumulative: 3,
-        newClients: 1,
-        names: ['Bella Napoli'],
-        retention: '100%',
-        growthRate: '+50%',
-      },
-      {
-        month: 'Ago',
-        fullMonth: 'Agosto 2026',
-        cumulative: 4,
-        newClients: 1,
-        names: ['Barbearia Kings'],
-        retention: '100%',
-        growthRate: '+33%',
-      },
-      {
-        month: 'Set (Atual)',
-        fullMonth: 'Setembro 2026 (Atual)',
-        cumulative: 7,
-        newClients: 3,
-        names: ['Mercadinho do Bairro', 'Supermercado Central', 'Economia Total'],
-        retention: '100%',
-        growthRate: '+75%',
-      },
-    ];
-  }, []);
+  const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const MONTHS_FULL_PT = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+  ];
 
-  // Coordenadas limpas para a curva de crescimento (5 meses)
+  // ─── Crescimento real de clientes (últimos 5 meses a partir de createdAt) ───
+  const clientGrowthData = useMemo(() => {
+    const now = new Date();
+    const buckets: { month: string; fullMonth: string; newClients: number; names: string[] }[] = [];
+    for (let i = 4; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const inMonth = tenantsList.filter((t: any) => {
+        const c = new Date(t.createdAt);
+        return c >= d && c < next;
+      });
+      const tag = i === 0 ? ' (Atual)' : '';
+      buckets.push({
+        month: `${MONTHS_PT[d.getMonth()]}${tag}`,
+        fullMonth: `${MONTHS_FULL_PT[d.getMonth()]} ${d.getFullYear()}${tag}`,
+        newClients: inMonth.length,
+        names: inMonth.map((t: any) => t.name),
+      });
+    }
+    const firstStart = new Date(now.getFullYear(), now.getMonth() - 4, 1);
+    let cum = tenantsList.filter((t: any) => new Date(t.createdAt) < firstStart).length;
+    return buckets.map((b, idx) => {
+      const prevCum = cum;
+      cum += b.newClients;
+      const growthRate =
+        idx === 0
+          ? 'Início'
+          : prevCum > 0
+            ? `+${Math.round((b.newClients / prevCum) * 100)}%`
+            : b.newClients > 0
+              ? '+100%'
+              : '0%';
+      return { ...b, cumulative: cum, growthRate };
+    });
+  }, [tenantsList]);
+
+  const maxCumulative = Math.max(1, ...clientGrowthData.map((c) => c.cumulative));
+  const maxNewClients = Math.max(1, ...clientGrowthData.map((c) => c.newClients));
+
+  // Coordenadas da curva de crescimento (escala dinâmica pelo máximo real).
   const growthCoords = useMemo(() => {
+    const n = clientGrowthData.length;
     return clientGrowthData.map((item, idx) => {
-      // x de 70 a 690 (delta = 620 / 4 = 155)
-      const x = 70 + idx * 155;
-      // y de 25 (valor 7 empresas) a 155 (valor 0)
-      const y = 155 - (item.cumulative / 7) * 130;
+      const x = n > 1 ? 70 + idx * (620 / (n - 1)) : 380;
+      const y = 155 - (item.cumulative / maxCumulative) * 130;
       return { x, y, item };
     });
-  }, [clientGrowthData]);
+  }, [clientGrowthData, maxCumulative]);
+
+  // Rótulos do eixo Y (dinâmicos, a partir dos máximos reais).
+  const growthAxisAccum = useMemo(() => {
+    const steps = [1, 0.75, 0.5, 0.25, 0];
+    return steps.map((f, i) => (i === steps.length - 1 ? '0' : `${Math.round(maxCumulative * f)} emp.`));
+  }, [maxCumulative]);
+  const growthAxisNew = useMemo(() => {
+    const steps = [1, 0.66, 0.33, 0];
+    return steps.map((f, i) => (i === steps.length - 1 ? '0' : `+${Math.round(maxNewClients * f)} novos`));
+  }, [maxNewClients]);
 
   const growthSplineD = useMemo(() => getSplinePath(growthCoords), [growthCoords]);
   const growthAreaD = useMemo(() => {
@@ -346,63 +322,113 @@ export const DashboardPage: React.FC = () => {
     return `${growthSplineD} L ${growthCoords[growthCoords.length - 1].x.toFixed(1)},160 L ${growthCoords[0].x.toFixed(1)},160 Z`;
   }, [growthSplineD, growthCoords]);
 
-  // ─── Dados Dinâmicos para os Gráficos ───
-  const revenueAnalyticsData = useMemo(() => {
-    if (revenuePeriod === 'Esta Semana') {
-      return {
-        yLabels: ['30k', '25k', '20k', '15k', '10k', '5k', '0k'],
-        bars: [
-          { label: 'Sex', heightPct: 62, value: 'R$ 17.500', isPeak: false },
-          { label: 'Sáb', heightPct: 44, value: 'R$ 12.300', isPeak: false },
-          { label: 'Dom', heightPct: 88, value: 'R$ 22.430', isPeak: true },
-          { label: 'Seg', heightPct: 48, value: 'R$ 13.900', isPeak: false },
-          { label: 'Ter', heightPct: 56, value: 'R$ 15.800', isPeak: false },
-          { label: 'Qua', heightPct: 92, value: 'R$ 23.100', isPeak: false },
-          { label: 'Qui', heightPct: 66, value: 'R$ 18.600', isPeak: false },
-        ],
-      };
-    }
-    if (revenuePeriod === 'Este Mês') {
-      return {
-        yLabels: ['80k', '65k', '50k', '35k', '20k', '10k', '0k'],
-        bars: [
-          { label: 'Sem 1', heightPct: 54, value: 'R$ 42.100', isPeak: false },
-          { label: 'Sem 2', heightPct: 72, value: 'R$ 56.400', isPeak: false },
-          { label: 'Sem 3', heightPct: 92, value: 'R$ 68.900', isPeak: true },
-          { label: 'Sem 4', heightPct: 64, value: 'R$ 48.200', isPeak: false },
-        ],
-      };
-    }
-    // 'Este Ano'
-    return {
-      yLabels: ['30k', '25k', '20k', '15k', '10k', '5k', '0k'],
-      bars: [
-        { label: 'Mar', heightPct: 35, value: 'R$ 8.500', isPeak: false },
-        { label: 'Abr', heightPct: 46, value: 'R$ 11.200', isPeak: false },
-        { label: 'Mai', heightPct: 58, value: 'R$ 14.800', isPeak: false },
-        { label: 'Jun', heightPct: 70, value: 'R$ 18.200', isPeak: false },
-        { label: 'Jul', heightPct: 78, value: 'R$ 20.400', isPeak: false },
-        { label: 'Ago', heightPct: 84, value: 'R$ 21.800', isPeak: false },
-        { label: 'Set', heightPct: 96, value: 'R$ 24.900', isPeak: true },
-      ],
-    };
-  }, [revenuePeriod]);
+  // ─── Faturas reais (p/ gráficos de receita e recebimento) ───
+  const allInvoices: any[] = Array.isArray(invoicesRes?.data) ? invoicesRes.data : [];
+  const paidInvoices = useMemo(() => allInvoices.filter((i: any) => i.status === 'PAID'), [allInvoices]);
 
-  // ─── Demonstrativo de Rendimento DRE (Verde Esmeralda para Lucro & Grafite para Custos) ───
+  /** Teto "bonito" p/ eixo Y (1/2/2.5/5 × 10^n). */
+  const niceCeil = (v: number) => {
+    if (v <= 0) return 1;
+    const exp = Math.floor(Math.log10(v));
+    const base = 10 ** exp;
+    for (const m of [1, 2, 2.5, 5, 10]) {
+      if (v <= m * base) return m * base;
+    }
+    return 10 * base;
+  };
+  const fmtAxisK = (v: number) => (v >= 1000 ? `${parseFloat((v / 1000).toFixed(1))}k` : `${Math.round(v)}`);
+
+  // ─── Evolução de faturamento REAL (faturas PAID agrupadas por período) ───
+  const revenueAnalyticsData = useMemo(() => {
+    const now = new Date();
+    const sumRange = (start: Date, end: Date) =>
+      paidInvoices
+        .filter((i: any) => {
+          const d = new Date(i.paidAt || i.createdAt);
+          return d >= start && d < end;
+        })
+        .reduce((s: number, i: any) => s + Number(i.amountCents || 0), 0);
+
+    let buckets: { label: string; cents: number }[] = [];
+    if (revenuePeriod === 'Esta Semana') {
+      const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+        buckets.push({ label: WD[d.getDay()], cents: sumRange(d, next) });
+      }
+    } else if (revenuePeriod === 'Este Mês') {
+      for (let i = 3; i >= 0; i--) {
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i * 7);
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (i + 1) * 7);
+        buckets.push({ label: `Sem ${4 - i}`, cents: sumRange(start, end) });
+      }
+    } else {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        buckets.push({ label: MONTHS_PT[d.getMonth()], cents: sumRange(d, next) });
+      }
+    }
+    const max = Math.max(0, ...buckets.map((b) => b.cents));
+    const top = niceCeil(max);
+    const yLabels = [6, 5, 4, 3, 2, 1, 0].map((s) => (s === 0 ? '0' : fmtAxisK((top / 6) * s)));
+    return {
+      yLabels,
+      bars: buckets.map((b) => ({
+        label: b.label,
+        heightPct: max > 0 ? Math.max(4, Math.round((b.cents / max) * 100)) : 0,
+        value: fmtBRL(b.cents),
+        isPeak: max > 0 && b.cents === max,
+      })),
+    };
+  }, [revenuePeriod, paidInvoices]);
+
+  // ─── Recebido & A Receber REAL (últimos 8 meses, por paidAt/vencimento) ───
   const incomeMonthsData = useMemo(() => {
-    return [
-      { label: '00', profitPct: 0, lossPct: 0, profitVal: 'R$ 0', lossVal: 'R$ 0', total: 'R$ 0', margin: '0%' },
-      { label: 'Jan', profitPct: 42, lossPct: 22, profitVal: 'R$ 16.800', lossVal: 'R$ 6.200', total: 'R$ 23.000', margin: '73.0%' },
-      { label: 'Fev', profitPct: 48, lossPct: 26, profitVal: 'R$ 19.200', lossVal: 'R$ 7.400', total: 'R$ 26.600', margin: '72.1%' },
-      { label: 'Mar', profitPct: 54, lossPct: 25, profitVal: 'R$ 22.100', lossVal: 'R$ 7.900', total: 'R$ 30.000', margin: '73.6%' },
-      { label: 'Abr', profitPct: 45, lossPct: 30, profitVal: 'R$ 18.000', lossVal: 'R$ 8.600', total: 'R$ 26.600', margin: '67.6%' },
-      { label: 'Mai', profitPct: 60, lossPct: 28, profitVal: 'R$ 24.500', lossVal: 'R$ 8.100', total: 'R$ 32.600', margin: '75.1%' },
-      { label: 'Jun', profitPct: 68, lossPct: 38, profitVal: 'R$ 28.000', lossVal: 'R$ 11.200', total: 'R$ 39.200', margin: '71.4%' },
-      { label: 'Jul', profitPct: 46, lossPct: 32, profitVal: 'R$ 19.800', lossVal: 'R$ 9.400', total: 'R$ 29.200', margin: '67.8%' },
-      { label: 'Ago', profitPct: 55, lossPct: 24, profitVal: 'R$ 23.600', lossVal: 'R$ 7.200', total: 'R$ 30.800', margin: '76.6%' },
-      { label: 'Set', profitPct: 74, lossPct: 25, profitVal: 'R$ 31.200', lossVal: 'R$ 8.000', total: 'R$ 39.200', margin: '79.5%' },
-    ];
-  }, []);
+    const now = new Date();
+    const rows: { label: string; receivedCents: number; openCents: number }[] = [];
+    for (let i = 7; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const received = allInvoices
+        .filter((inv: any) => {
+          if (inv.status !== 'PAID' || !inv.paidAt) return false;
+          const dt = new Date(inv.paidAt);
+          return dt >= d && dt < next;
+        })
+        .reduce((s: number, inv: any) => s + Number(inv.amountCents || 0), 0);
+      const open = allInvoices
+        .filter((inv: any) => {
+          if (inv.status === 'PAID' || inv.status === 'CANCELED') return false;
+          const dt = new Date(inv.dueDate || inv.createdAt);
+          return dt >= d && dt < next;
+        })
+        .reduce((s: number, inv: any) => s + Number(inv.amountCents || 0), 0);
+      rows.push({ label: MONTHS_PT[d.getMonth()], receivedCents: received, openCents: open });
+    }
+    const maxTotal = Math.max(0, ...rows.map((r) => r.receivedCents + r.openCents));
+    return {
+      maxTotal,
+      months: rows.map((r) => {
+        const total = r.receivedCents + r.openCents;
+        return {
+          label: r.label,
+          profitPct: maxTotal > 0 ? Math.round((r.receivedCents / maxTotal) * 100) : 0,
+          lossPct: maxTotal > 0 ? Math.round((r.openCents / maxTotal) * 100) : 0,
+          profitVal: fmtBRL(r.receivedCents),
+          lossVal: fmtBRL(r.openCents),
+          total: fmtBRL(total),
+          margin: total > 0 ? `${Math.round((r.receivedCents / total) * 100)}% recebido` : '—',
+        };
+      }),
+    };
+  }, [allInvoices]);
+
+  const incomeAxisLabels = useMemo(() => {
+    const top = niceCeil(incomeMonthsData.maxTotal);
+    return [5, 4, 3, 2, 1, 0].map((s) => (s === 0 ? '00' : fmtAxisK((top / 5) * s)));
+  }, [incomeMonthsData.maxTotal]);
 
   return (
     <div className="relative -mx-6 sm:-mx-8 lg:-mx-10 -my-6 px-6 sm:px-8 lg:px-10 py-6 min-h-[calc(100vh-4rem)] space-y-6 select-none font-sans text-zinc-900 pb-16 isolate overflow-hidden">
@@ -427,46 +453,6 @@ export const DashboardPage: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Nova Empresa</span>
           </Button>
-
-          {/* Seletor de Período em Pílula Branca com Linha Visível */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="h-9 px-4 bg-white border border-zinc-300 rounded-xl shadow-2xs hover:border-zinc-400 text-xs font-semibold text-zinc-700 flex items-center gap-2 transition cursor-pointer"
-              >
-                <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                <span>{dateRange}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-white rounded-xl p-1.5 border border-zinc-200 text-xs shadow-xl">
-              <DropdownMenuItem
-                onClick={() => setDateRange('10 Abr 2026 - 11 Mai 2026')}
-                className="rounded-xl px-3 py-2 cursor-pointer font-medium hover:bg-zinc-50"
-              >
-                10 Abr 2026 - 11 Mai 2026 (Padrão)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDateRange('Últimos 30 dias')}
-                className="rounded-xl px-3 py-2 cursor-pointer font-medium hover:bg-zinc-50"
-              >
-                Últimos 30 dias
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDateRange('Mês Atual (Setembro 2026)')}
-                className="rounded-xl px-3 py-2 cursor-pointer font-medium hover:bg-zinc-50"
-              >
-                Mês Atual (Setembro 2026)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDateRange('Ano Vigente 2026')}
-                className="rounded-xl px-3 py-2 cursor-pointer font-medium hover:bg-zinc-50"
-              >
-                Ano Vigente 2026
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
@@ -485,16 +471,16 @@ export const DashboardPage: React.FC = () => {
 
           <div className="mt-4 mb-2 flex items-baseline gap-2.5">
             <span className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-zinc-900 leading-none">
-              2.500
+              {kpis?.activeClients ?? totalTenantsCount}
             </span>
             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200">
               <TrendingUp className="w-3 h-3" />
-              <span>4.9%</span>
+              <span>+{tenantMonthStats.thisMonth} novos</span>
             </span>
           </div>
 
           <span className="text-xs text-zinc-400 font-medium">
-            Mês anterior: 2.345 transações
+            Mês passado: {tenantMonthStats.prevMonth} empresas
           </span>
         </div>
 
@@ -515,12 +501,12 @@ export const DashboardPage: React.FC = () => {
             </span>
             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200">
               <TrendingUp className="w-3 h-3" />
-              <span>+3 novos</span>
+              <span>+{tenantMonthStats.thisMonth} este mês</span>
             </span>
           </div>
 
           <span className="text-xs text-zinc-400 font-medium">
-            3 ativas · 3 em trial · 1 em atraso
+            {statusBreakdown.active} ativas · {statusBreakdown.trial} em trial · {statusBreakdown.late} em atraso
           </span>
         </div>
 
@@ -541,7 +527,7 @@ export const DashboardPage: React.FC = () => {
             </span>
             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold text-sky-600 bg-sky-50 border border-sky-200">
               <TrendingDown className="w-3 h-3" />
-              <span>R$ 199,00</span>
+              <span>{fmtBRL((billingOverview?.atRiskRevenue ?? 0) * 100)}</span>
             </span>
           </div>
 
@@ -565,6 +551,20 @@ export const DashboardPage: React.FC = () => {
             <span className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-zinc-900 leading-none">
               {totalRevenueFormatted}
             </span>
+            {typeof billingOverview?.growthPercent === 'number' && (
+              <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                billingOverview.growthPercent >= 0
+                  ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                  : 'text-rose-600 bg-rose-50 border-rose-200'
+              }`}>
+                {billingOverview.growthPercent >= 0 ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                <span>{billingOverview.growthPercent}%</span>
+              </span>
+            )}
           </div>
 
           <span className="text-xs text-zinc-400 font-medium">
@@ -696,27 +696,27 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card Direita: Rendimento & Custos (Lucro em VERDE ESMERALDA & Despesas em Carvão) */}
+        {/* Card Direita: Recebido & A Receber (faturas reais por mês) */}
         <div className="lg:col-span-5 xl:col-span-5 bg-white rounded-[26px] p-6 sm:p-7 border border-zinc-300 shadow-2xs flex flex-col justify-between">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-6">
             <div>
               <h2 className="text-base font-bold text-zinc-900 tracking-tight">
-                Rendimento & Custos (DRE)
+                Recebido & A Receber
               </h2>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                Demonstrativo de margem operacional no período
+                Faturas pagas e em aberto por mês
               </p>
             </div>
 
-            {/* Legenda: Lucro (Verde Esmeralda) e Custos (Carvão) */}
+            {/* Legenda: Recebido (Verde Esmeralda) e Em aberto (Grafite) */}
             <div className="flex items-center gap-3 text-[11px] font-semibold text-zinc-600 self-end sm:self-auto shrink-0">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-[3px] bg-emerald-500" />
-                <span>Lucro Líquido</span>
+                <span>Recebido</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-[3px] bg-zinc-900" />
-                <span>Custos</span>
+                <span>Em aberto</span>
               </div>
             </div>
           </div>
@@ -724,12 +724,9 @@ export const DashboardPage: React.FC = () => {
           {/* Gráfico SVG de Barras Empilhadas em Verde Esmeralda & Grafite */}
           <div className="relative w-full h-[250px] flex">
             <div className="flex flex-col justify-between text-[11px] font-mono text-zinc-400 pr-3 select-none pb-7">
-              <span>50k</span>
-              <span>40k</span>
-              <span>30k</span>
-              <span>20k</span>
-              <span>10k</span>
-              <span>00</span>
+              {incomeAxisLabels.map((lbl, i) => (
+                <span key={`${lbl}-${i}`}>{lbl}</span>
+              ))}
             </div>
 
             <div className="relative flex-1 flex flex-col justify-between">
@@ -743,31 +740,31 @@ export const DashboardPage: React.FC = () => {
               </div>
 
               <div className="relative z-10 h-full flex items-end justify-between px-1 sm:px-3 pb-7">
-                {incomeMonthsData.map((item, idx) => {
+                {incomeMonthsData.months.map((item, idx) => {
                   const isHovered = hoveredIncomeIndex === idx;
 
                   return (
                     <div
                       key={item.label}
                       className="flex flex-col items-center group relative h-full justify-end cursor-pointer"
-                      style={{ width: '8.5%' }}
+                      style={{ width: `${Math.floor(88 / incomeMonthsData.months.length)}%` }}
                       onMouseEnter={() => setHoveredIncomeIndex(idx)}
                       onMouseLeave={() => setHoveredIncomeIndex(null)}
                     >
                       {/* Tooltip Flutuante Detalhado ao Passar o Mouse */}
-                      {isHovered && item.profitPct > 0 && (
+                      {isHovered && (item.profitPct > 0 || item.lossPct > 0) && (
                         <div className="absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center z-30 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
                           <div className="bg-zinc-950 text-white p-2.5 rounded-xl shadow-xl text-[10px] whitespace-nowrap border border-zinc-800 flex flex-col gap-0.5">
-                            <span className="font-bold text-zinc-300">{item.label} 2026</span>
-                            <span className="text-emerald-400 font-semibold">● Lucro: {item.profitVal} ({item.margin})</span>
-                            <span className="text-zinc-400">● Custos: {item.lossVal}</span>
-                            <span className="text-zinc-500 text-[9px] border-t border-zinc-800/80 pt-1 mt-0.5">Faturamento: {item.total}</span>
+                            <span className="font-bold text-zinc-300">{item.label}</span>
+                            <span className="text-emerald-400 font-semibold">● Recebido: {item.profitVal} ({item.margin})</span>
+                            <span className="text-zinc-400">● Em aberto: {item.lossVal}</span>
+                            <span className="text-zinc-500 text-[9px] border-t border-zinc-800/80 pt-1 mt-0.5">Total: {item.total}</span>
                           </div>
                           <div className="w-1.5 h-1.5 rotate-45 bg-zinc-950 -mt-1 border-r border-b border-zinc-800" />
                         </div>
                       )}
 
-                      {item.profitPct > 0 ? (
+                      {item.profitPct > 0 || item.lossPct > 0 ? (
                         <>
                           <div
                             className={`w-full rounded-t-full transition-all duration-300 relative overflow-hidden shadow-2xs ${
@@ -784,7 +781,7 @@ export const DashboardPage: React.FC = () => {
                                 #059669 6px
                               )`,
                             }}
-                            title={`${item.label} Lucro Líquido: ${item.profitVal}`}
+                            title={`${item.label} Recebido: ${item.profitVal}`}
                           />
 
                           <div
@@ -792,7 +789,7 @@ export const DashboardPage: React.FC = () => {
                               isHovered ? 'bg-zinc-800 scale-y-105' : 'hover:bg-zinc-800'
                             } mt-0.5`}
                             style={{ height: `${item.lossPct}%` }}
-                            title={`${item.label} Custos: ${item.lossVal}`}
+                            title={`${item.label} Em aberto: ${item.lossVal}`}
                           />
                         </>
                       ) : (
@@ -829,7 +826,7 @@ export const DashboardPage: React.FC = () => {
                     Crescimento de Clientes
                   </h2>
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200/90">
-                    +75% este mês
+                    {tenantMonthStats.growth >= 0 ? '+' : ''}{tenantMonthStats.growth}% este mês
                   </span>
                 </div>
                 <p className="text-xs text-zinc-500 mt-0.5">
@@ -877,13 +874,13 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
             <div>
-              <span className="text-[11px] font-medium text-zinc-500">Novos em Setembro</span>
+              <span className="text-[11px] font-medium text-zinc-500">Novos em {tenantMonthStats.monthName}</span>
               <div className="flex items-baseline gap-1.5 mt-0.5">
                 <span className="text-2xl font-extrabold text-purple-600 font-mono leading-none">
-                  +3
+                  +{tenantMonthStats.thisMonth}
                 </span>
                 <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200/70">
-                  +75%
+                  {tenantMonthStats.growth >= 0 ? '+' : ''}{tenantMonthStats.growth}%
                 </span>
               </div>
             </div>
@@ -891,18 +888,18 @@ export const DashboardPage: React.FC = () => {
               <span className="text-[11px] font-medium text-zinc-500">Taxa de Retenção</span>
               <div className="flex items-baseline gap-1.5 mt-0.5">
                 <span className="text-2xl font-extrabold text-emerald-600 font-mono leading-none">
-                  100%
+                  {totalTenantsCount > 0 ? Math.round(((totalTenantsCount - statusBreakdown.suspended) / totalTenantsCount) * 100) : 100}%
                 </span>
-                <span className="text-xs font-medium text-zinc-400">0 cancelamentos</span>
+                <span className="text-xs font-medium text-zinc-400">{statusBreakdown.suspended} cancelamentos</span>
               </div>
             </div>
             <div>
-              <span className="text-[11px] font-medium text-zinc-500">Tempo Médio de Ativação</span>
+              <span className="text-[11px] font-medium text-zinc-500">Em Trial</span>
               <div className="flex items-baseline gap-1.5 mt-0.5">
                 <span className="text-2xl font-extrabold text-zinc-900 font-mono leading-none">
-                  1.8
+                  {statusBreakdown.trial}
                 </span>
-                <span className="text-xs font-medium text-zinc-400">dias</span>
+                <span className="text-xs font-medium text-zinc-400">empresas</span>
               </div>
             </div>
           </div>
@@ -913,18 +910,15 @@ export const DashboardPage: React.FC = () => {
             <div className="absolute left-0 top-1 bottom-8 flex flex-col justify-between text-[10px] font-mono text-zinc-400 pointer-events-none z-10">
               {growthMetricMode === 'ACUMULADO' ? (
                 <>
-                  <span>7 emp.</span>
-                  <span>5 emp.</span>
-                  <span>3 emp.</span>
-                  <span>1 emp.</span>
-                  <span>0</span>
+                  {growthAxisAccum.map((lbl, i) => (
+                    <span key={i}>{lbl}</span>
+                  ))}
                 </>
               ) : (
                 <>
-                  <span>+3 novos</span>
-                  <span>+2 novos</span>
-                  <span>+1 novo</span>
-                  <span>0</span>
+                  {growthAxisNew.map((lbl, i) => (
+                    <span key={i}>{lbl}</span>
+                  ))}
                 </>
               )}
             </div>
@@ -1023,7 +1017,7 @@ export const DashboardPage: React.FC = () => {
                 {growthCoords.map((pt, idx) => {
                   const isLatest = idx === growthCoords.length - 1;
                   const isHovered = hoveredGrowthIndex === idx;
-                  const barHeight = Math.max((pt.item.newClients / 3) * 115, 6);
+                  const barHeight = Math.max((pt.item.newClients / maxNewClients) * 115, pt.item.newClients > 0 ? 6 : 2);
                   const barY = 160 - barHeight;
                   const barWidth = 36;
                   const barX = pt.x - barWidth / 2;
@@ -1144,9 +1138,10 @@ export const DashboardPage: React.FC = () => {
 
             <div className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200/90 overflow-hidden bg-white">
               {tenantsList.slice(0, 4).map((t: any) => {
-                const niche = getNicheBadge(t.niche);
-                const isTrial = t.status === 'TRIAL' || t.plan?.includes('Varejo');
-                const isDelinquent = t.status === 'PAST_DUE' || t.slug === 'kings-barber';
+                const niche = getNicheBadge(t.niche, (t as any).companyCategory);
+                const isTrial = t.status === 'TRIAL';
+                const isDelinquent = t.status === 'PAST_DUE';
+                const delinqDays = delinqDaysByTenant[`mail:${t.contactEmail}`] ?? delinqDaysByTenant[`name:${t.legalName}`];
 
                 return (
                   <div
@@ -1177,22 +1172,25 @@ export const DashboardPage: React.FC = () => {
                       </span>
                       {isDelinquent ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-800 border border-sky-200">
-                          Inadimplente (15d)
+                          Inadimplente{typeof delinqDays === 'number' && delinqDays > 0 ? ` (${delinqDays}d)` : ''}
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-100 text-zinc-700">
-                          {isTrial ? 'Trial 14d' : 'Ativo'}
+                          {isTrial ? 'Trial' : 'Ativo'}
                         </span>
                       )}
-                      <a
-                        href={`/${t.slug}/app`}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (t.slug) setViewingSlug(t.slug);
+                          window.open('/app/dashboard', '_blank');
+                        }}
+                        title={t.slug ? `Abrir painel de ${t.name}` : 'Abrir painel'}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 transition shadow-2xs cursor-pointer"
                       >
                         <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
                         <span>Abrir ERP</span>
-                      </a>
+                      </button>
                     </div>
                   </div>
                 );
@@ -1210,7 +1208,7 @@ export const DashboardPage: React.FC = () => {
                 <PieChart className="w-4 h-4 text-sky-500" />
                 <span>Distribuição por Nicho</span>
               </h3>
-              <span className="text-[11px] font-mono text-zinc-400">7 Lojas</span>
+              <span className="text-[11px] font-mono text-zinc-400">{totalTenantsCount} lojas</span>
             </div>
 
             {/* Barra Segmentada */}
@@ -1218,7 +1216,7 @@ export const DashboardPage: React.FC = () => {
               <div
                 style={{ width: `${nicheStats.supermarket.pct}%` }}
                 className="h-full bg-sky-500 rounded-l-full"
-                title={`Supermercados: ${nicheStats.supermarket.count}`}
+                title={`Universal: ${nicheStats.supermarket.count}`}
               />
               <div
                 style={{ width: `${nicheStats.barbershop.pct}%` }}
@@ -1237,7 +1235,7 @@ export const DashboardPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
-                  <span className="font-medium text-zinc-700">Supermercados & Varejo</span>
+                  <span className="font-medium text-zinc-700">Universal</span>
                 </div>
                 <span className="font-mono font-bold text-zinc-900">
                   {nicheStats.supermarket.count} ({nicheStats.supermarket.pct}%)
@@ -1274,12 +1272,17 @@ export const DashboardPage: React.FC = () => {
                 <span>Saúde Operacional do SaaS</span>
               </h3>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                85.7% OK
+                {totalTenantsCount > 0
+                  ? `${Math.round(((totalTenantsCount - Math.min(delinquentCount, totalTenantsCount)) / totalTenantsCount) * 100)}% OK`
+                  : '—'}
               </span>
             </div>
 
             <p className="text-xs text-zinc-500 leading-relaxed">
-              6 de 7 empresas estão com faturamento e operação em dia. Apenas 1 fatura requer cobrança ativa.
+              {totalTenantsCount - Math.min(delinquentCount, totalTenantsCount)} de {totalTenantsCount} empresas em dia.
+              {delinquentCount > 0
+                ? ` ${delinquentCount} ${delinquentCount === 1 ? 'fatura requer' : 'faturas requerem'} cobrança ativa.`
+                : ' Nenhuma cobrança pendente.'}
             </p>
 
             <div className="pt-2 border-t border-zinc-100 flex flex-col gap-2 text-xs">
@@ -1289,7 +1292,7 @@ export const DashboardPage: React.FC = () => {
                 className="w-full h-9 rounded-xl bg-zinc-50 hover:bg-zinc-100 text-zinc-700 font-semibold flex items-center justify-between px-3 transition cursor-pointer"
               >
                 <span>Ver Régua de Inadimplência</span>
-                <span className="font-mono text-sky-600 font-bold">1 caso</span>
+                <span className="font-mono text-sky-600 font-bold">{delinquentCount} caso(s)</span>
               </button>
 
               <button

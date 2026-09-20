@@ -48,10 +48,16 @@ export function clearAdminToken() {
   } catch {}
 }
 
-export function saveTenantToken(slug: string, token: string) {
+export function saveTenantToken(slugOrToken: string, maybeToken?: string) {
   try {
-    localStorage.setItem(`saas_tenant_token_${slug}`, token);
-    localStorage.setItem('saas_active_tenant_token', token);
+    if (maybeToken) {
+      if (slugOrToken) {
+        localStorage.setItem(`saas_tenant_token_${slugOrToken}`, maybeToken);
+      }
+      localStorage.setItem('saas_active_tenant_token', maybeToken);
+    } else if (slugOrToken) {
+      localStorage.setItem('saas_active_tenant_token', slugOrToken);
+    }
   } catch {}
 }
 
@@ -73,5 +79,28 @@ export function clearTenantToken(slug?: string) {
       localStorage.removeItem(`saas_tenant_token_${slug}`);
     }
     localStorage.removeItem('saas_active_tenant_token');
+  } catch {}
+}
+
+const VIEWING_SLUG_KEY = 'saas_viewing_slug';
+
+/** Empresa que o Super Admin escolheu visualizar no App (suporte). */
+export function setViewingSlug(slug: string) {
+  try {
+    if (slug) localStorage.setItem(VIEWING_SLUG_KEY, slug.toLowerCase());
+  } catch {}
+}
+
+export function getViewingSlug(): string | null {
+  try {
+    return localStorage.getItem(VIEWING_SLUG_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearViewingSlug() {
+  try {
+    localStorage.removeItem(VIEWING_SLUG_KEY);
   } catch {}
 }

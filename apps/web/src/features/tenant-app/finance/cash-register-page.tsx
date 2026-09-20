@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
   DollarSign,
@@ -13,6 +14,10 @@ import {
   Sparkles,
   TrendingUp,
   Receipt,
+  Printer,
+  FileText,
+  AlertTriangle,
+  BellRing,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiGet, apiPost } from '@/lib/api';
@@ -31,7 +36,8 @@ import {
 } from '@/components/ui/dialog';
 
 export const CashRegisterPage: React.FC = () => {
-  const { slug } = useTenant();
+  const { slug, base } = useTenant();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [openModal, setOpenModal] = useState(false);
@@ -39,11 +45,24 @@ export const CashRegisterPage: React.FC = () => {
   const [initialBalance, setInitialBalance] = useState('100,00');
   const [actualBalance, setActualBalance] = useState('');
   const [notes, setNotes] = useState('');
+  // Movimento avulso: 'SUPRIMENTO' põe grana, 'SANGRIA' tira grana do turno.
+  const [movementModal, setMovementModal] = useState<null | { type: 'SUPRIMENTO' | 'SANGRIA' }>(null);
+  const [movementAmount, setMovementAmount] = useState('');
+  const [movementReason, setMovementReason] = useState('');
+  const [movementIsTest, setMovementIsTest] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['cash-register', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/cash-register`),
     refetchInterval: 10000,
+  });
+
+  // Alertas de contas a pagar: vencidas / vence hoje (crítico) / 3 dias (aviso).
+  const { data: billAlerts } = useQuery({
+    queryKey: ['bills-alerts', slug],
+    queryFn: () => apiGet(`/tenant-app/${slug}/finance/bills/alerts`).catch(() => null),
+    enabled: !!slug,
+    refetchInterval: 60000,
   });
 
   const isOpen = data?.isOpen;
@@ -71,6 +90,57 @@ export const CashRegisterPage: React.FC = () => {
     },
     onError: (err: any) => toast.error(err.response?.data?.message || 'Erro ao fechar caixa'),
   });
+
+  const movementMutation = useMutation({
+    mutationFn: (payload: { type: string; amountCents: number; reason: string }) =>
+      apiPost(`/tenant-app/${slug}/cash-register/movement`, payload),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['cash-register', slug] });
+      setMovementModal(null);
+      setMovementAmount('');
+      setMovementReason('');
+      setMovementIsTest(false);
+      toast.success(
+        vars.type === 'SUPRIMENTO' ? 'Grana adicionada ao caixa!' : 'Sangria registrada no caixa!',
+      );
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || 'Erro ao registrar movimento'),
+  });
+
+  const parseCents = (raw: string) => {
+    const v = parseFloat((raw || '').replace(/[^\d,.-]/g, '').replace(',', '.'));
+    return Number.isFinite(v) && v > 0 ? Math.round(v * 100) : 0;
+  };
+
+  const handleMovementSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movementModal) return;
+    const amountCents = parseCents(movementAmount);
+    if (amountCents <= 0) return toast.error('Informe um valor maior que zero.');
+    const reason = movementReason.trim();
+    movementMutation.mutate({
+      type: movementModal.type,
+      amountCents,
+      // Grana de teste vai marcada: aparece com selo TESTE no histórico.
+      reason: movementIsTest ? `[TESTE] ${reason || 'lançamento de teste'}` : reason || undefined as any,
+    });
+  };
+
+  const openMovementModal = (type: 'SUPRIMENTO' | 'SANGRIA', isTest = false) => {
+    setMovementModal({ type });
+    setMovementAmount('');
+    setMovementReason('');
+    setMovementIsTest(isTest);
+  };
+
+  /** Separa o selo [TESTE] do motivo para exibir destacado. */
+  const splitTestTag = (reason: string | null | undefined) => {
+    const text = (reason || '').trim();
+    if (/^\[TESTE\]/i.test(text)) {
+      return { isTest: true, text: text.replace(/^\[TESTE\]\s*/i, '') || 'Lançamento de teste' };
+    }
+    return { isTest: false, text: text || ('' as string) };
+  };
 
   const handleOpen = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,14 +218,16 @@ export const CashRegisterPage: React.FC = () => {
         </div>
 
         {isOpen ? (
-          <Button
-            size="sm"
-            onClick={() => setCloseModal(true)}
-            className="h-9 px-4 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-sm flex items-center gap-1.5"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>Fechar Caixa & Gerar DRE</span>
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => setCloseModal(true)}
+              className="h-9 px-4 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-sm flex items-center gap-1.5"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Fechar Caixa & Gerar DRE</span>
+            </Button>
+          </div>
         ) : (
           <Button
             size="sm"
@@ -166,6 +238,100 @@ export const CashRegisterPage: React.FC = () => {
             <span>Abrir Turno de Caixa</span>
           </Button>
         )}
+      </div>
+
+      {/* Alertas de contas: crítico = vencida / vence hoje, aviso = 3 dias */}
+      {((billAlerts?.overdue?.length || 0) + (billAlerts?.dueToday?.length || 0) + (billAlerts?.dueSoon?.length || 0)) > 0 && (
+        <div className="space-y-2">
+          {(billAlerts?.overdue?.length || 0) > 0 && (
+            <div className="p-3.5 rounded-2xl bg-rose-600 text-white flex items-start gap-2.5 shadow-md">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-black uppercase tracking-wide">
+                  {billAlerts.overdue.length} conta(s) vencida(s) — ação imediata
+                </p>
+                {billAlerts.overdue.slice(0, 2).map((a: any) => (
+                  <p key={a.id} className="font-medium mt-0.5">
+                    {a.description} • {(Number(a.amountCents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} • venceu em{' '}
+                    {new Date(a.dueDate).toLocaleDateString('pt-BR')}
+                  </p>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => navigate(`${base}/finance/payables`)}
+                  className="mt-1.5 underline font-bold cursor-pointer"
+                >
+                  Ver contas a pagar
+                </button>
+              </div>
+            </div>
+          )}
+          {(billAlerts?.dueToday?.length || 0) > 0 && (billAlerts?.overdue?.length || 0) === 0 && (
+            <div className="p-3.5 rounded-2xl bg-amber-500 text-zinc-950 flex items-start gap-2.5 shadow-md">
+              <BellRing className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-black uppercase tracking-wide">
+                  {billAlerts.dueToday.length} conta(s) vence(m) hoje
+                </p>
+                {billAlerts.dueToday.slice(0, 2).map((a: any) => (
+                  <p key={a.id} className="font-medium mt-0.5">
+                    {a.description} • {(Number(a.amountCents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+          {(billAlerts?.dueSoon?.length || 0) > 0 && (billAlerts?.overdue?.length || 0) === 0 && (billAlerts?.dueToday?.length || 0) === 0 && (
+            <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p>
+                <span className="font-black">Vencendo em até 3 dias: </span>
+                {billAlerts.dueSoon.slice(0, 3).map((a: any) => a.description).join(' • ')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Os 2 sistemas do Financeiro: relatório térmico + contas a pagar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => navigate(`${base}/reports/closing`)}
+          className="text-left p-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition flex items-center gap-3 cursor-pointer"
+        >
+          <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+            <Printer className="w-5 h-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-black">Relatório Vendas de Hoje</span>
+            <span className="block text-[11px] text-emerald-100 mt-0.5">
+              Lista sequencial + totais por pagamento + impressão térmica 80mm/58mm. Hoje, semana e mês.
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate(`${base}/finance/payables`)}
+          className="text-left p-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition flex items-center gap-3 cursor-pointer"
+        >
+          <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+            <FileText className="w-5 h-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black flex items-center gap-2">
+              Contas a Pagar
+              {((billAlerts?.overdue?.length || 0) + (billAlerts?.dueToday?.length || 0)) > 0 && (
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-white text-rose-700">
+                  {(billAlerts.overdue.length || 0) + (billAlerts.dueToday.length || 0)} urgente(s)
+                </span>
+              )}
+            </span>
+            <span className="block text-[11px] text-rose-100 mt-0.5">
+              Despesas fixas, vencimentos, baixas e abatimento no saldo líquido do fechamento.
+            </span>
+          </span>
+        </button>
       </div>
 
       {isOpen ? (
@@ -215,6 +381,57 @@ export const CashRegisterPage: React.FC = () => {
                 <span className="font-mono">R$ {(expectedFinalCents / 100).toFixed(2)}</span>
               </div>
             </div>
+
+            {/* Movimentos do turno: suprimentos (+) e sangrias (−) */}
+            {(data?.movements || []).length > 0 && (
+              <div className="pt-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                  Movimentos do turno
+                </p>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
+                  {(data.movements || []).map((m: any) => {
+                    const tag = splitTestTag(m.reason);
+                    const defaultLabel = m.type === 'SUPRIMENTO' ? 'Suprimento' : 'Sangria';
+                    return (
+                    <div
+                      key={m.id}
+                      className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border text-[11px] ${
+                        tag.isTest
+                          ? 'bg-amber-50 border-dashed border-amber-400'
+                          : 'bg-zinc-50 border-zinc-100'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span
+                          className={`font-black ${
+                            m.type === 'SUPRIMENTO' ? 'text-emerald-700' : 'text-amber-700'
+                          }`}
+                        >
+                          {m.type === 'SUPRIMENTO' ? '+' : '−'}{' '}
+                          {tag.text || defaultLabel}
+                        </span>
+                        {tag.isTest && (
+                          <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400 text-zinc-950 align-middle">
+                            Teste
+                          </span>
+                        )}
+                        <span className="block text-zinc-400 font-mono">
+                          {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <span
+                        className={`font-black font-mono shrink-0 ${
+                          m.type === 'SUPRIMENTO' ? 'text-emerald-700' : 'text-amber-700'
+                        }`}
+                      >
+                        {m.type === 'SUPRIMENTO' ? '+' : '−'} R$ {(m.amountCents / 100).toFixed(2)}
+                      </span>
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Card>
 
           {/* Discriminação por Forma de Pagamento */}
@@ -395,6 +612,115 @@ export const CashRegisterPage: React.FC = () => {
                 className="h-10 px-5 text-xs font-bold text-white bg-gradient-to-b from-zinc-800 to-zinc-950 hover:from-zinc-700 hover:to-zinc-900 border border-zinc-700/50 rounded-xl shadow-2xs hover:shadow-xs transition-all active:scale-[0.98] cursor-pointer"
               >
                 {openMutation.isPending ? 'Abrindo...' : 'Confirmar e Abrir Caixa'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Suprimento / Sangria */}
+      <Dialog open={!!movementModal} onOpenChange={(open) => !open && setMovementModal(null)}>
+        <DialogContent className="sm:max-w-md bg-white border border-zinc-200/90 p-6 sm:p-7 rounded-3xl font-sans shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black text-zinc-900 flex items-center gap-2">
+              {movementModal?.type === 'SUPRIMENTO' ? (
+                <>
+                  <DollarSign className="w-5 h-5 text-emerald-600" />
+                  Adicionar grana ao caixa
+                </>
+              ) : (
+                <>
+                  <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-black">−</span>
+                  Sangria do caixa
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500">
+              {movementModal?.type === 'SUPRIMENTO'
+                ? 'Reforço de troco: o valor soma na gaveta do turno atual.'
+                : 'Retirada: o valor abate da gaveta do turno atual.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleMovementSubmit} className="space-y-4 mt-2">
+            <div>
+              <label className="text-xs font-bold text-zinc-800 block mb-1.5">Valor (R$) *</label>
+              <Input
+                placeholder="Ex: 50,00"
+                value={movementAmount}
+                onChange={(e) => setMovementAmount(e.target.value)}
+                inputMode="decimal"
+                className="h-11 text-base font-bold font-mono rounded-xl bg-zinc-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-zinc-800 transition"
+                required
+                autoFocus
+              />
+              <div className="flex items-center gap-2 mt-2.5">
+                {['20,00', '50,00', '100,00'].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setMovementAmount(val)}
+                    className="h-8 px-3 text-xs font-bold font-mono bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 rounded-xl shadow-2xs transition-all cursor-pointer"
+                  >
+                    R$ {val}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-zinc-800 block mb-1.5">Motivo (opcional)</label>
+              <Input
+                placeholder={movementModal?.type === 'SUPRIMENTO' ? 'Ex: reforço de troco' : 'Ex: pagamento fornecedor'}
+                value={movementReason}
+                onChange={(e) => setMovementReason(e.target.value)}
+                maxLength={120}
+                className="h-10 text-xs font-medium rounded-xl bg-zinc-50 border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:bg-white focus:border-zinc-800 transition"
+              />
+            </div>
+
+            <label className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-50 border border-dashed border-amber-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={movementIsTest}
+                onChange={(e) => setMovementIsTest(e.target.checked)}
+                className="w-4 h-4 rounded accent-amber-500"
+              />
+              <span>
+                <span className="text-xs font-black text-zinc-900 block">É grana de teste</span>
+                <span className="text-[11px] text-zinc-500 block">
+                  Marca com selo TESTE no histórico pra ninguém confundir com dinheiro real.
+                </span>
+              </span>
+            </label>
+
+            <DialogFooter className="mt-6 flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setMovementModal(null)}
+                className="h-10 px-4 text-xs font-bold text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200/90 rounded-xl shadow-2xs cursor-pointer"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={movementMutation.isPending}
+                className={`h-10 px-5 text-xs font-bold text-white rounded-xl shadow-2xs transition-all active:scale-[0.98] cursor-pointer ${
+                  movementModal?.type === 'SUPRIMENTO'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {movementMutation.isPending
+                  ? 'Registrando...'
+                  : movementIsTest
+                    ? movementModal?.type === 'SUPRIMENTO'
+                      ? 'Adicionar TESTE ao caixa'
+                      : 'Confirmar sangria TESTE'
+                    : movementModal?.type === 'SUPRIMENTO'
+                      ? 'Adicionar ao caixa'
+                      : 'Confirmar sangria'}
               </Button>
             </DialogFooter>
           </form>

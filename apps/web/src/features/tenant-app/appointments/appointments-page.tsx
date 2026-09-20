@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { apptVertical } from './appointment-vertical';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
@@ -27,7 +29,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiGet, apiPost, apiPatch } from '@/lib/api';
+import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
 import { useTenant } from '../context/tenant-context';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,174 +60,29 @@ interface AppointmentItem {
   barberId?: string;
 }
 
-const BARBERS_LIST_FALLBACK: Array<{ id: string; name: string; role: string }> = [
-  { id: 'all', name: 'Todos os Barbeiros', role: 'Equipe Completa' },
-];
-
-const PRESET_SERVICES = [
-  { name: 'Corte Degradê Navalhado', price: '50,00', priceCents: 5000, durationMin: 40 },
-  { name: 'Barboterapia Completa', price: '45,00', priceCents: 4500, durationMin: 35 },
-  { name: 'Combo Cabelo + Barba', price: '85,00', priceCents: 8500, durationMin: 60 },
-  { name: 'Corte Social na Tesoura', price: '40,00', priceCents: 4000, durationMin: 35 },
-  { name: 'Combo Cabelo + Barba + Sobrancelha', price: '95,00', priceCents: 9500, durationMin: 70 },
-  { name: 'Pezinho & Acabamento', price: '25,00', priceCents: 2500, durationMin: 20 },
-];
-
-// Grade padrão de blocos de horários (idêntico à imagem do usuário)
+// Grade padrão de blocos de horários (configuração da casa).
 const ALL_TIME_SLOTS = [
   '08:00', '08:40', '09:20', '10:00', '10:40', '11:20',
   '12:00', '12:40', '13:20', '14:00', '14:40', '15:20',
   '16:00', '16:40', '17:20', '18:00', '18:40', '19:20'
 ];
 
-// Mês base: Setembro 2026
-const YEAR = 2026;
-const MONTH = 8; // 8 = Setembro (0-indexed)
-
-const DEFAULT_MOCK_APPOINTMENTS: AppointmentItem[] = [
-  {
-    id: 'apt-1',
-    customerName: 'Matheus Ribeiro',
-    customerPhone: '(11) 98765-4321',
-    serviceName: 'Corte Degradê Navalhado',
-    barberName: 'Lucas Silva',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '08:00',
-    durationMin: 40,
-    priceCents: 5000,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'apt-2',
-    customerName: 'Felipe Camargo',
-    customerPhone: '(11) 97654-3210',
-    serviceName: 'Barboterapia Completa',
-    barberName: 'Marcos Vinicius',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '08:40',
-    durationMin: 35,
-    priceCents: 4500,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'apt-3',
-    customerName: 'Gabriel Souza',
-    customerPhone: '(11) 96543-2109',
-    serviceName: 'Combo Cabelo + Barba',
-    barberName: 'Lucas Silva',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '09:20',
-    durationMin: 40,
-    priceCents: 8500,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'apt-4',
-    customerName: 'Thiago Mendes',
-    customerPhone: '(11) 95432-1098',
-    serviceName: 'Corte Social na Tesoura',
-    barberName: 'André Oliveira',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '10:00',
-    durationMin: 35,
-    priceCents: 4000,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'apt-5',
-    customerName: 'Rodrigo Dias',
-    customerPhone: '(11) 94321-0987',
-    serviceName: 'Corte Degradê Navalhado',
-    barberName: 'Lucas Silva',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '10:40',
-    durationMin: 40,
-    priceCents: 5000,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'apt-6',
-    customerName: 'Carlos Eduardo',
-    customerPhone: '(11) 93210-9876',
-    serviceName: 'Combo Cabelo + Barba',
-    barberName: 'Marcos Vinicius',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '11:20',
-    durationMin: 40,
-    priceCents: 8500,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'apt-block-1',
-    customerName: 'Pausa Almoço da Equipe',
-    serviceName: 'Intervalo Bloqueado',
-    barberName: 'Lucas Silva',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '12:00',
-    durationMin: 40,
-    priceCents: 0,
-    status: 'BLOCKED',
-  },
-  {
-    id: 'apt-7',
-    customerName: 'Vinicius Prado',
-    customerPhone: '(11) 92109-8765',
-    serviceName: 'Corte Degradê Navalhado',
-    barberName: 'Lucas Silva',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '14:00',
-    durationMin: 40,
-    priceCents: 5000,
-    status: 'IN_PROGRESS',
-    whatsappReminderSent: true,
-  },
-  {
-    id: 'apt-8',
-    customerName: 'Lucas Barbosa',
-    customerPhone: '(11) 91098-7654',
-    serviceName: 'Corte Degradê Navalhado',
-    barberName: 'Marcos Vinicius',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '18:00',
-    durationMin: 40,
-    priceCents: 5000,
-    status: 'CONFIRMED',
-    whatsappReminderSent: true,
-  },
-  {
-    id: 'apt-9',
-    customerName: 'Leonardo Rocha',
-    customerPhone: '(11) 99887-7665',
-    serviceName: 'Pezinho & Acabamento',
-    barberName: 'André Oliveira',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '18:40',
-    durationMin: 40,
-    priceCents: 2500,
-    status: 'CONFIRMED',
-  },
-  {
-    id: 'apt-10',
-    customerName: 'Guilherme Silva',
-    customerPhone: '(11) 98712-3456',
-    serviceName: 'Barboterapia Completa',
-    barberName: 'Lucas Silva',
-    scheduledDate: '2026-09-10',
-    scheduledTime: '19:20',
-    durationMin: 40,
-    priceCents: 4500,
-    status: 'CONFIRMED',
-  },
-];
 
 export const AppointmentsPage: React.FC = () => {
-  const { slug, tenant } = useTenant();
+  const { slug, base, tenant } = useTenant();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Data Selecionada (Padrão: 10/09/2026)
-  const [selectedYear, setSelectedYear] = useState(YEAR);
-  const [selectedMonth, setSelectedMonth] = useState(MONTH);
-  const [selectedDay, setSelectedDay] = useState(10);
+  // Perfil vertical: rótulos do segmento (técnico, corte, OS...).
+  const apptV = apptVertical(
+    (tenant as any)?.niche,
+    (tenant as any)?.company?.category || (tenant as any)?.category,
+  );
+
+  // Data Selecionada (padrão: hoje de verdade).
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
 
   // Filtros
   const [selectedBarber, setSelectedBarber] = useState<string>('all');
@@ -241,22 +98,23 @@ export const AppointmentsPage: React.FC = () => {
   const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
   const [activeSlotTime, setActiveSlotTime] = useState('14:40');
 
-  // Form State: Novo Agendamento
-  const [serviceName, setServiceName] = useState('Corte Degradê Navalhado');
+  // Form State: Novo Agendamento (vazio: serviço e profissional vêm da casa).
+  // Sem campo "Valor": o preço vem do serviço (catálogo real). Serviço novo
+  // sem histórico entra zerado e o valor é ajustado no checkout.
+  const [serviceName, setServiceName] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [price, setPrice] = useState('50,00');
-  const [assignedBarber, setAssignedBarber] = useState('Lucas Silva');
-  const [durationMin, setDurationMin] = useState(40);
+  const [assignedBarber, setAssignedBarber] = useState('');
+  const [durationMin, setDurationMin] = useState(30);
 
   // Form State: Bloqueio
   const [blockReason, setBlockReason] = useState('Pausa para Almoço');
-  const [blockBarber, setBlockBarber] = useState('Lucas Silva');
+  const [blockBarber, setBlockBarber] = useState('');
 
   // Checkout
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'CREDIT' | 'DEBIT' | 'CASH'>('PIX');
 
-  // Local storage state
+  // Rascunhos offline criados neste dispositivo (vazio: sem clientes inventados).
   const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() => {
     try {
       const storageKey = `orbyshox_tenant_appointments_${slug}`;
@@ -268,7 +126,7 @@ export const AppointmentsPage: React.FC = () => {
     } catch {
       // ignore
     }
-    return DEFAULT_MOCK_APPOINTMENTS;
+    return [];
   });
 
   const saveLocalAppointments = (updated: AppointmentItem[]) => {
@@ -281,15 +139,32 @@ export const AppointmentsPage: React.FC = () => {
     }
   };
 
+  // Remove um rascunho local (usado quando o servidor confirma e passa a ser
+  // a fonte oficial — sem isso a agenda exibia o agendamento duplicado).
+  const dropLocalAppointment = (id: string) => {
+    setLocalAppointments((prev) => {
+      if (!prev.some((a) => a.id === id)) return prev;
+      const next = prev.filter((a) => a.id !== id);
+      try {
+        localStorage.setItem(`orbyshox_tenant_appointments_${slug}`, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
   // Queries
   const { data: serverAppointments = [] } = useQuery({
     queryKey: ['tenant-appointments', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/appointments`),
+    refetchInterval: 15000,
   });
 
   const { data: teamData } = useQuery({
     queryKey: ['tenant-appointments-team', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/employees`),
+    refetchInterval: 30000,
   });
 
   const employees = (teamData?.employees || []) as Array<{ id: string; name: string; role: string; isActive?: boolean }>;
@@ -301,24 +176,94 @@ export const AppointmentsPage: React.FC = () => {
     return [{ id: 'all', name: 'Todos os Funcionários', role: 'Equipe Completa' }, ...team];
   }, [employees]);
 
+  // Cadastro oficial de serviços da casa (o que vai p/ o online).
+  const { data: servicesData = [] } = useQuery({
+    queryKey: ['tenant-services', slug],
+    queryFn: () => apiGet(`/tenant-app/${slug}/services`),
+    enabled: !!slug,
+    refetchInterval: 30000,
+  });
+  const registeredServices: any[] = Array.isArray(servicesData) ? servicesData : [];
+
+  // Catálogo de serviços REAL: cadastro oficial primeiro + nomes do
+  // histórico que ainda não foram cadastrados. Sem nada, vazio honesto.
+  const serviceCatalog = useMemo(() => {
+    const fromRegistry = registeredServices.map((s: any) => ({
+      serviceId: s.id,
+      name: s.name,
+      priceCents: Number(s.priceCents) || 0,
+      price: (Number(s.priceCents || 0) / 100).toFixed(2).replace('.', ','),
+      durationMin: Number(s.durationMin) || 30,
+      count: 0,
+      isActive: s.isActive !== false,
+    }));
+    const known = new Set(fromRegistry.map((s) => s.name.trim().toLowerCase()));
+    const byName = new Map<string, { count: number; prices: Map<number, number>; durations: Map<number, number> }>();
+    for (const apt of (serverAppointments || []) as any[]) {
+      const name = String(apt.serviceName || '').trim();
+      if (!name || known.has(name.toLowerCase())) continue;
+      let e = byName.get(name);
+      if (!e) {
+        e = { count: 0, prices: new Map(), durations: new Map() };
+        byName.set(name, e);
+      }
+      e.count += 1;
+      const p = Math.round(Number(apt.priceCents) || 0);
+      e.prices.set(p, (e.prices.get(p) || 0) + 1);
+      const d = Math.round(Number(apt.durationMin) || 30);
+      e.durations.set(d, (e.durations.get(d) || 0) + 1);
+    }
+    const modeOf = (m: Map<number, number>) => {
+      let best = 0;
+      let bestN = -1;
+      for (const [v, n] of m) {
+        if (n > bestN) {
+          bestN = n;
+          best = v;
+        }
+      }
+      return best;
+    };
+    const fromHistory = [...byName.entries()]
+      .map(([name, e]) => ({
+        name,
+        priceCents: modeOf(e.prices),
+        price: (modeOf(e.prices) / 100).toFixed(2).replace('.', ','),
+        durationMin: modeOf(e.durations),
+        count: e.count,
+        isActive: true,
+      }))
+      .sort((a, b) => b.count - a.count);
+    return [...fromRegistry, ...fromHistory];
+  }, [registeredServices, serverAppointments]);
+
+  // Preço do serviço digitado/selecionado (do catálogo real; 0 se inédito).
+  const servicePriceCents = useMemo(() => {
+    const match = serviceCatalog.find(
+      (s) => s.name.trim().toLowerCase() === serviceName.trim().toLowerCase(),
+    );
+    return match ? match.priceCents : 0;
+  }, [serviceCatalog, serviceName]);
+
   // Mescla appointments
   const allAppointments: AppointmentItem[] = useMemo(() => {
     if (serverAppointments && serverAppointments.length > 0) {
+      const todayIso = new Date().toISOString().split('T')[0];
       const formattedServer = serverAppointments.map((apt: any) => ({
         id: apt.id,
         customerName: apt.customer?.name || apt.customerName || 'Cliente',
         customerPhone: apt.customer?.phone || apt.customerPhone || '',
-        serviceName: apt.serviceName || 'Corte',
-        barberName: apt.staff?.name || apt.barberName || 'Lucas Silva',
+        serviceName: apt.serviceName || 'Serviço',
+        barberName: apt.staff?.name || apt.barberName || '—',
         barberId: apt.staffId || apt.staff?.id || apt.barberId || undefined,
         scheduledDate: apt.scheduledAt
           ? new Date(apt.scheduledAt).toISOString().split('T')[0]
-          : '2026-09-10',
+          : todayIso,
         scheduledTime: apt.scheduledAt
           ? new Date(apt.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : '14:00',
-        durationMin: apt.durationMin || 40,
-        priceCents: apt.priceCents || 5000,
+          : '—',
+        durationMin: apt.durationMin || 30,
+        priceCents: Number(apt.priceCents) || 0,
         status: (apt.status || 'CONFIRMED') as any,
         whatsappReminderSent: Boolean(apt.whatsappReminderSent),
       }));
@@ -467,15 +412,23 @@ export const AppointmentsPage: React.FC = () => {
       toast.error('Informe o nome do cliente');
       return;
     }
+    if (!serviceName.trim()) {
+      toast.error('Informe o serviço');
+      return;
+    }
+    if (!assignedBarber) {
+      toast.error('Escolha o funcionário responsável');
+      return;
+    }
 
-    const priceCents = Math.round(parseFloat(price.replace(',', '.') || '0') * 100);
+    const priceCents = servicePriceCents;
     const newId = 'apt-' + Date.now();
 
     const newRecord: AppointmentItem = {
       id: newId,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      serviceName,
+      serviceName: serviceName.trim(),
       barberName: assignedBarber,
       scheduledDate: formattedSelectedDate,
       scheduledTime: activeSlotTime,
@@ -487,16 +440,22 @@ export const AppointmentsPage: React.FC = () => {
     const updated = [newRecord, ...localAppointments];
     saveLocalAppointments(updated);
 
-    createMutation.mutate({
-      serviceName,
-      customerName,
-      customerPhone,
-      priceCents,
-      staffName: assignedBarber,
-      scheduledAt: `${formattedSelectedDate}T${activeSlotTime}:00`,
-      durationMin,
-      status: 'CONFIRMED',
-    });
+    createMutation.mutate(
+      {
+        serviceName: serviceName.trim(),
+        customerName,
+        customerPhone,
+        priceCents,
+        staffName: assignedBarber,
+        scheduledAt: `${formattedSelectedDate}T${activeSlotTime}:00`,
+        durationMin,
+        status: 'CONFIRMED',
+      },
+      {
+        // Sincronizou: remove o rascunho local (senão a agenda mostra 2x).
+        onSuccess: () => dropLocalAppointment(newId),
+      },
+    );
 
     setBookingModalOpen(false);
     setCustomerName('');
@@ -511,12 +470,18 @@ export const AppointmentsPage: React.FC = () => {
   // Salvar Bloqueio de Horário
   const handleSaveBlock = (e: React.FormEvent) => {
     e.preventDefault();
+    const barberForBlock =
+      blockBarber || barbersList.filter((b) => b.id !== 'all')[0]?.name || '';
+    if (!barberForBlock) {
+      toast.error('Cadastre um funcionário antes de bloquear horários');
+      return;
+    }
     const newId = 'block-' + Date.now();
     const newRecord: AppointmentItem = {
       id: newId,
       customerName: blockReason.trim() || 'Pausa da Equipe',
       serviceName: 'Horário Bloqueado',
-      barberName: blockBarber,
+      barberName: barberForBlock,
       scheduledDate: formattedSelectedDate,
       scheduledTime: activeSlotTime,
       durationMin: 40,
@@ -593,9 +558,9 @@ export const AppointmentsPage: React.FC = () => {
   // Disparar WhatsApp
   const handleSendWhatsApp = (apt: AppointmentItem) => {
     const cleanPhone = (apt.customerPhone || '').replace(/\D/g, '');
-    const companyName = tenant?.tradeName || tenant?.companyName || 'Barbearia';
+    const companyName = tenant?.tradeName || tenant?.companyName || apptV.companyFallback;
     const text = encodeURIComponent(
-      `Olá ${apt.customerName}! 💈 Confirmando seu horário de *${apt.serviceName}* com o barbeiro *${apt.barberName}* no dia *${formattedBrazilianDate}* às *${apt.scheduledTime}* na *${companyName}*. Te aguardamos!`
+      `Olá ${apt.customerName}! ${apptV.emoji} Confirmando seu horário de *${apt.serviceName}* com ${apptV.pro.toLowerCase()} *${apt.barberName}* no dia *${formattedBrazilianDate}* às *${apt.scheduledTime}* na *${companyName}*. Te aguardamos!`
     );
 
     const updated = localAppointments.map((a) =>
@@ -671,6 +636,22 @@ export const AppointmentsPage: React.FC = () => {
             >
               <Copy className="w-3.5 h-3.5 text-zinc-400" />
               <span>Link Online</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`${base}/services`)}
+              className="h-9 px-3 text-xs font-bold text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200/90 rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Cadastrar serviços que aparecem no agendamento online"
+            >
+              <Scissors className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Serviços</span>
+              {registeredServices.filter((s: any) => s.isActive !== false).length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-black">
+                  {registeredServices.filter((s: any) => s.isActive !== false).length}
+                </span>
+              )}
             </Button>
 
             <Button
@@ -844,7 +825,7 @@ export const AppointmentsPage: React.FC = () => {
           </div>
 
           {/* Legenda Resumida dos Blocos */}
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <div className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-300 text-amber-900 font-bold text-[10px] flex items-center gap-1">
               <Lock className="w-2.5 h-2.5 text-amber-600" />
               <span>Concluído / Pausa</span>
@@ -905,12 +886,12 @@ export const AppointmentsPage: React.FC = () => {
                     type="button"
                     onClick={() => handleSlotClick(slot)}
                     className="aspect-square rounded-xl border-2 border-emerald-500 bg-emerald-100 text-emerald-950 flex flex-col items-center justify-center p-1 transition-all shadow-2xs cursor-pointer active:scale-95 ring-2 ring-emerald-500/20 animate-pulse select-none"
-                    title={`Na Cadeira: ${bookedItem.customerName} (${bookedItem.serviceName})`}
+                    title={`${apptV.inChair}: ${bookedItem.customerName} (${bookedItem.serviceName})`}
                   >
                     <Scissors className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700 mb-0.5 sm:mb-1 shrink-0" />
                     <span className="font-mono font-black text-xs sm:text-sm tracking-tight leading-none">{slot}</span>
                     <span className="text-[9px] font-sans font-bold text-emerald-800 mt-1 leading-none">
-                      Corte
+                      {apptV.serviceNoun}
                     </span>
                   </button>
                 );
@@ -1040,11 +1021,11 @@ export const AppointmentsPage: React.FC = () => {
                       <strong className="text-zinc-900">{activeAppointment.serviceName}</strong>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-zinc-500">Barbeiro:</span>
+                      <span className="text-zinc-500">{apptV.pro}:</span>
                       <strong className="text-zinc-900">{activeAppointment.barberName}</strong>
                     </div>
                     <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
-                      <span className="text-xs font-bold text-zinc-700">Valor do Corte:</span>
+                      <span className="text-xs font-bold text-zinc-700">{apptV.valueLabel}:</span>
                       <span className="text-base font-black text-emerald-600 font-mono">
                         R$ {((activeAppointment.priceCents || 0) / 100).toFixed(2)}
                       </span>
@@ -1074,7 +1055,7 @@ export const AppointmentsPage: React.FC = () => {
                           className="h-10 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-2xl cursor-pointer"
                         >
                           <Scissors className="w-3.5 h-3.5 mr-1" />
-                          <span>Iniciar Corte</span>
+                          <span>{apptV.startLabel}</span>
                         </Button>
                       )}
 
@@ -1133,36 +1114,44 @@ export const AppointmentsPage: React.FC = () => {
           </DialogHeader>
 
           <form onSubmit={handleSaveBooking} className="space-y-3.5 mt-2">
-            {/* Escolha Rápida do Serviço */}
+            {/* Escolha Rápida do Serviço (serviços reais da casa) */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-zinc-800 block">Serviço *</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {PRESET_SERVICES.slice(0, 4).map((s) => (
+              {serviceCatalog.length > 0 && (
+                <div className="grid grid-cols-2 gap-1.5">
+                {serviceCatalog.slice(0, 4).map((s) => (
                   <button
                     key={s.name}
                     type="button"
                     onClick={() => {
                       setServiceName(s.name);
-                      setPrice(s.price);
                       setDurationMin(s.durationMin);
                     }}
-                    className={`p-2 rounded-xl border text-left transition select-none cursor-pointer ${
-                      serviceName === s.name
-                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
-                        : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
-                    }`}
-                  >
-                    <p className="text-[11px] font-bold truncate">{s.name}</p>
-                    <p
-                      className={`text-[10px] font-mono ${
-                        serviceName === s.name ? 'text-amber-400' : 'text-zinc-500'
+                      className={`p-2 rounded-xl border text-left transition select-none cursor-pointer ${
+                        serviceName === s.name
+                          ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                          : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
                       }`}
                     >
-                      R$ {s.price} · {s.durationMin}m
-                    </p>
-                  </button>
-                ))}
-              </div>
+                      <p className="text-[11px] font-bold truncate">{s.name}</p>
+                      <p
+                        className={`text-[10px] font-mono ${
+                          serviceName === s.name ? 'text-amber-400' : 'text-zinc-500'
+                        }`}
+                      >
+                        R$ {s.price} · {s.durationMin}m
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Input
+                placeholder="Ex: nome do serviço"
+                value={serviceName}
+                onChange={(e) => setServiceName(e.target.value)}
+                className="h-9 text-xs rounded-xl bg-zinc-50 border-zinc-200 text-zinc-900 focus:bg-white"
+                required
+              />
             </div>
 
             {/* Escolha do Funcionário */}
@@ -1231,13 +1220,10 @@ export const AppointmentsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-zinc-800 block mb-1">Valor (R$) *</label>
-                <Input
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="h-9 text-xs font-mono rounded-xl bg-zinc-50 border-zinc-200 text-zinc-900 focus:bg-white"
-                  required
-                />
+                <label className="text-xs font-bold text-zinc-800 block mb-1">Valor do serviço</label>
+                <div className="h-9 px-3 text-xs font-mono font-black rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center">
+                  {(servicePriceCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
               </div>
             </div>
 
@@ -1312,6 +1298,7 @@ export const AppointmentsPage: React.FC = () => {
                   onChange={(e) => setBlockBarber(e.target.value)}
                   className="w-full h-9 px-2 text-xs rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 focus:bg-white"
                 >
+                  <option value="">Selecionar funcionário...</option>
                   {barbersList.filter((b) => b.id !== 'all').map((b) => (
                     <option key={b.id} value={b.name}>
                       {b.name}
@@ -1381,7 +1368,7 @@ export const AppointmentsPage: React.FC = () => {
                   <strong className="text-zinc-900">{activeAppointment.serviceName}</strong>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-zinc-500">Barbeiro:</span>
+                  <span className="text-zinc-500">{apptV.pro}:</span>
                   <strong className="text-zinc-900">{activeAppointment.barberName}</strong>
                 </div>
                 <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">

@@ -394,7 +394,7 @@ export const StockBatchesPage: React.FC = () => {
       {/* ─── Batches Table ─── */}
       <div className="bg-white rounded-3xl border border-zinc-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[700px] text-left text-xs">
             <thead className="bg-zinc-50 border-b border-zinc-200/70 text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3 px-4">Produto / Categoria</th>

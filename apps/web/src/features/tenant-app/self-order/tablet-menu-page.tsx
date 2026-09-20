@@ -72,6 +72,8 @@ export const TabletMenuPage: React.FC<{ mode: 'qr' | 'tablet' }> = ({ mode }) =>
     queryFn: () => apiGet(endpoint),
     enabled: !!token,
     retry: 1,
+    // Cardápio do cliente acompanha preço/disponibilidade sem F5.
+    refetchInterval: 30000,
   });
 
   // Mutações

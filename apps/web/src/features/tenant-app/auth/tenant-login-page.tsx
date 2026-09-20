@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiGet, apiPost } from '@/lib/api';
-import { saveTenantToken } from '@/lib/auth';
+import { saveTenantToken, clearViewingSlug } from '@/lib/auth';
+import { resolvePortalDestination } from '@/lib/role-routing';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,16 +59,20 @@ export const TenantLoginPage: React.FC = () => {
     let cancelled = false;
     if (!slug) {
       apiGet('/tenant-app/auth/me')
-        .then(() => {
-          if (!cancelled) navigate('/app/dashboard');
+        .then((res) => {
+          if (!cancelled) {
+            navigate(resolvePortalDestination(res?.user, null, '/app'));
+          }
         })
         .catch(() => {});
       return;
     }
 
     apiGet(`/tenant-app/${slug}/me`)
-      .then(() => {
-        if (!cancelled) navigate('/app/dashboard');
+      .then((res) => {
+        if (!cancelled) {
+          navigate(resolvePortalDestination(res?.user, null, '/app'));
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -76,7 +81,9 @@ export const TenantLoginPage: React.FC = () => {
             if (res?.accessToken) {
               saveTenantToken(slug, res.accessToken);
             }
-            if (!cancelled) navigate('/app/dashboard');
+            if (!cancelled) {
+              navigate(resolvePortalDestination(res?.user, null, '/app'));
+            }
           })
           .catch(() => {});
       });
@@ -100,8 +107,12 @@ export const TenantLoginPage: React.FC = () => {
         if (response.accessToken) {
           saveTenantToken(slug || '', response.accessToken);
         }
+        // Login real na loja: derruba qualquer "empresa visualizada" de
+        // suporte que tenha ficado gravada — senão o catálogo abriria com
+        // produtos de outra empresa.
+        clearViewingSlug();
         toast.success(`Bem-vindo ao painel, ${response.user.name}!`);
-        navigate('/app/dashboard');
+        navigate(resolvePortalDestination(response.user, null, '/app'));
         return;
       }
       throw new Error('Credenciais inválidas.');

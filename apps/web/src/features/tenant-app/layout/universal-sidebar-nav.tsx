@@ -11,6 +11,7 @@ import {
   Wallet,
   BarChart3,
   Settings,
+  CalendarDays,
 } from 'lucide-react';
 
 interface NavLinkItem {
@@ -93,20 +94,23 @@ const topLinkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-[#6c757d] hover:text-zinc-900 hover:bg-white/50'
   }`;
 
-interface SupermarketSidebarNavProps {
+interface UniversalSidebarNavProps {
   slug: string;
   onNav?: () => void;
   groups: Record<string, boolean>;
   setGroup: (key: string, v: boolean) => void;
 }
 
-export const SupermarketSidebarNav: React.FC<SupermarketSidebarNavProps> = ({
+// Nav lateral do template Universal (antes "supermercado"): Operação, Estoque,
+// Compras, Clientes, Financeiro, Relatórios, Equipe e Configurações — os
+// módulos que qualquer empresa usa. Rotas internas mantidas.
+export const UniversalSidebarNav: React.FC<UniversalSidebarNavProps> = ({
   slug,
   onNav,
   groups,
   setGroup,
 }) => {
-  const base = slug ? `/${slug}/app` : '/app';
+  const base = '/app';
 
   return (
     <nav className="space-y-1">
@@ -114,6 +118,25 @@ export const SupermarketSidebarNav: React.FC<SupermarketSidebarNavProps> = ({
       <NavLink to={`${base}/dashboard`} onClick={onNav} className={topLinkClass}>
         <LayoutGrid className="w-4 h-4 text-zinc-500 shrink-0" />
         <span>Dashboard</span>
+      </NavLink>
+
+      {/* 1b. Calendário (logo abaixo da Visão Geral + destaque) */}
+      <NavLink
+        to={`${base}/calendar`}
+        onClick={onNav}
+        className={({ isActive }) =>
+          `w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-[13px] font-bold transition-all border ${
+            isActive
+              ? 'bg-sky-600 text-white border-sky-600 shadow-[0_2px_8px_rgba(2,132,199,0.35)]'
+              : 'bg-sky-50/80 text-sky-900 border-sky-200/80 hover:bg-sky-100'
+          }`
+        }
+      >
+        <CalendarDays className="w-4 h-4 shrink-0" />
+        <span>Calendário</span>
+        <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-600 text-white">
+          Novo
+        </span>
       </NavLink>
 
       {/* 2. Operação */}

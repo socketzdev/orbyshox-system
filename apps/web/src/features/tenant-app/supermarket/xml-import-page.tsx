@@ -74,6 +74,7 @@ export const XmlImportPage: React.FC = () => {
   const { data: rawProductsData } = useQuery({
     queryKey: ['supermarket-products', slug],
     queryFn: () => apiGet<any>(`/tenant-app/${slug}/products`),
+    refetchInterval: 30000,
   });
 
   const catalogProducts = useMemo(() => {

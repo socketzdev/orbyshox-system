@@ -47,61 +47,8 @@ import {
   simulateStockConsumption,
 } from './recipe-calculator';
 
-const INITIAL_RECIPES: RecipeItem[] = [
-  {
-    id: 'rec-1',
-    name: 'X-Burger Artesanal',
-    category: 'Hambúrgueres',
-    salePrice: 34.9,
-    preparationTimeMinutes: 15,
-    ingredients: [
-      { id: 'ing-1', name: 'Pão de Hambúrguer Brioche', quantity: 1, unit: 'un', unitCost: 1.8 },
-      { id: 'ing-2', name: 'Carne Bovina Moída (Blend 150g)', quantity: 150, unit: 'g', unitCost: 28.0 }, // R$ 28/kg -> R$ 4,20
-      { id: 'ing-3', name: 'Queijo Cheddar Fatiado', quantity: 2, unit: 'fatia', unitCost: 0.75 }, // R$ 1,50
-      { id: 'ing-4', name: 'Molho Secreto da Casa', quantity: 30, unit: 'g', unitCost: 20.0 }, // R$ 0,60
-      { id: 'ing-5', name: 'Embalagem Térmica Kraft', quantity: 1, unit: 'un', unitCost: 1.1 },
-    ],
-  },
-  {
-    id: 'rec-2',
-    name: 'Pizza Grande Calabresa Especial',
-    category: 'Pizzas',
-    salePrice: 59.9,
-    preparationTimeMinutes: 22,
-    ingredients: [
-      { id: 'ing-6', name: 'Massa Artesanal Pré-assada 35cm', quantity: 1, unit: 'un', unitCost: 3.5 },
-      { id: 'ing-7', name: 'Molho de Tomate Pelati Italiano', quantity: 100, unit: 'g', unitCost: 14.0 }, // R$ 1,40
-      { id: 'ing-8', name: 'Queijo Muçarela Especial', quantity: 280, unit: 'g', unitCost: 34.0 }, // R$ 9,52
-      { id: 'ing-9', name: 'Linguiça Calabresa Defumada', quantity: 180, unit: 'g', unitCost: 24.0 }, // R$ 4,32
-      { id: 'ing-10', name: 'Cebola Roxa Fatiada', quantity: 50, unit: 'g', unitCost: 6.0 }, // R$ 0,30
-      { id: 'ing-11', name: 'Caixa de Pizza Oitavada 35cm', quantity: 1, unit: 'un', unitCost: 2.2 },
-    ],
-  },
-  {
-    id: 'rec-3',
-    name: 'Bife Ancho Grelhado c/ Rústicas',
-    category: 'Pratos Principais',
-    salePrice: 68.0,
-    preparationTimeMinutes: 20,
-    ingredients: [
-      { id: 'ing-12', name: 'Corte Nobre Bife Ancho (300g)', quantity: 300, unit: 'g', unitCost: 55.0 }, // R$ 16,50
-      { id: 'ing-13', name: 'Batatas Especiais c/ Alecrim', quantity: 200, unit: 'g', unitCost: 8.0 }, // R$ 1,60
-      { id: 'ing-14', name: 'Manteiga de Ervas Finas', quantity: 25, unit: 'g', unitCost: 36.0 }, // R$ 0,90
-    ],
-  },
-  {
-    id: 'rec-4',
-    name: 'Petit Gâteau c/ Sorvete de Baunilha',
-    category: 'Sobremesas',
-    salePrice: 24.0,
-    preparationTimeMinutes: 10,
-    ingredients: [
-      { id: 'ing-15', name: 'Bolinho Petit Gâteau Chocolate', quantity: 1, unit: 'un', unitCost: 3.8 },
-      { id: 'ing-16', name: 'Sorvete Artesanal Baunilha Fava', quantity: 80, unit: 'g', unitCost: 22.0 }, // R$ 1,76
-      { id: 'ing-17', name: 'Calda de Frutas Vermelhas', quantity: 20, unit: 'ml', unitCost: 25.0 }, // R$ 0,50
-    ],
-  },
-];
+// Sem ficha de exemplo: a casa cadastra as suas (vazio mostra vazio).
+const INITIAL_RECIPES: RecipeItem[] = [];
 
 export const RecipeBookPage: React.FC = () => {
   const { slug } = useTenant();
@@ -482,6 +429,24 @@ export const RecipeBookPage: React.FC = () => {
           );
         })}
       </div>
+
+      {filteredRecipes.length === 0 && (
+        <div className="p-12 text-center rounded-3xl border border-dashed border-zinc-300 bg-white">
+          <ChefHat className="w-10 h-10 mx-auto mb-2 text-zinc-300" />
+          <p className="font-bold text-zinc-700">Nenhuma ficha técnica cadastrada</p>
+          <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
+            Cadastre a composição dos seus pratos para calcular custo, CMV e margem de verdade.
+          </p>
+          <Button
+            size="sm"
+            onClick={handleOpenNewModal}
+            className="mt-4 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl h-9 px-4 gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Cadastrar primeira ficha
+          </Button>
+        </div>
+      )}
 
       {/* ─── Modal: Cadastro / Edição de Ficha Técnica ─── */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

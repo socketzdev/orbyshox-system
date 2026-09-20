@@ -21,8 +21,12 @@ import {
   Layers,
   ChevronRight,
   Info,
+  Palette,
+  QrCode,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { BrandingLogoSettings } from './branding-logo-settings';
 import { apiGet, apiPut, apiPost, apiDelete } from '@/lib/api';
 import { useTenant } from '../context/tenant-context';
 import { Button } from '@/components/ui/button';
@@ -37,13 +41,26 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type SettingsTab = 'cadastral' | 'pos_fiscal' | 'self_order' | 'modifiers';
+type SettingsTab = 'cadastral' | 'pos_fiscal' | 'self_order' | 'modifiers' | 'branding' | 'pix';
 
 export const StoreSettingsPage: React.FC = () => {
-  const { slug } = useTenant();
+  const { slug, tenant } = useTenant();
   const queryClient = useQueryClient();
 
+  // Abas de restaurante (mesa, cardápio, garçom) só fazem sentido com salão.
+  const isRestaurant =
+    tenant?.niche === 'RESTAURANT' ||
+    (tenant?.features || []).includes('tables') ||
+    (tenant?.features || []).includes('kds');
+
   const [activeTab, setActiveTab] = useState<SettingsTab>('modifiers');
+
+  // Sem salão, as abas de mesa/cardápio somem: cai para o cadastro.
+  useEffect(() => {
+    if (tenant && !isRestaurant && (activeTab === 'modifiers' || activeTab === 'self_order')) {
+      setActiveTab('cadastral');
+    }
+  }, [tenant, isRestaurant, activeTab]);
 
   // Form State (Geral & Fiscal)
   const [storeName, setStoreName] = useState('');
@@ -65,7 +82,14 @@ export const StoreSettingsPage: React.FC = () => {
   const [allowWaiterCall, setAllowWaiterCall] = useState(true);
   const [allowBillRequest, setAllowBillRequest] = useState(true);
   const [showTableBill, setShowTableBill] = useState(true);
-  const [welcomeMessage, setWelcomeMessage] = useState('Bem-vindo ao nosso restaurante! Faça seus pedidos direto pelo tablet.');
+  const [welcomeMessage, setWelcomeMessage] = useState('Bem-vindo à nossa loja!');
+
+  // PIX State
+  const [pixKey, setPixKey] = useState('');
+  const [pixReceiverName, setPixReceiverName] = useState('');
+  const [pixReceiverCity, setPixReceiverCity] = useState('');
+  const [pixStatus, setPixStatus] = useState<any>(null);
+
 
   // Modal State para Grupos de Modificadores
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -119,6 +143,10 @@ export const StoreSettingsPage: React.FC = () => {
       setNfceEnvironment(data.nfceEnvironment || 'HOMOLOGATION');
       setNfceCscId(data.nfceCscId || '');
       setNfceCscToken(data.nfceCscToken || '');
+      setPixKey(data.pixKey || '');
+      setPixReceiverName(data.pixReceiverName || '');
+      setPixReceiverCity(data.pixReceiverCity || '');
+      setPixStatus(data.pixStatus || null);
     }
   }, [data]);
 
@@ -200,6 +228,9 @@ export const StoreSettingsPage: React.FC = () => {
       nfceEnvironment,
       nfceCscId,
       nfceCscToken,
+      pixKey,
+      pixReceiverName,
+      pixReceiverCity,
     });
   };
 
@@ -299,7 +330,9 @@ export const StoreSettingsPage: React.FC = () => {
             Parâmetros & Personalização
           </h1>
           <p className="text-xs text-zinc-500 mt-0.5">
-            Gerencie dados cadastrais, operação fiscal, experiência do tablet de mesa e os modais dinâmicos do cardápio.
+            {isRestaurant
+              ? 'Gerencie dados cadastrais, operação fiscal, experiência do tablet de mesa e os modais dinâmicos do cardápio.'
+              : 'Gerencie dados cadastrais, operação fiscal, impressão, PIX e identidade da empresa.'}
           </p>
         </div>
 
@@ -328,34 +361,38 @@ export const StoreSettingsPage: React.FC = () => {
 
       {/* Navegação em Abas Corporativas */}
       <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-zinc-100/80 border border-zinc-200/80 overflow-x-auto no-scrollbar">
-        <button
-          type="button"
-          onClick={() => setActiveTab('modifiers')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'modifiers'
-              ? 'bg-white text-zinc-900 shadow-xs'
-              : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/50'
-          }`}
-        >
-          <Sliders className="w-4 h-4 text-amber-600" />
-          <span>Central de Modais & Opcionais</span>
-          <Badge className="ml-1 bg-amber-100 text-amber-900 text-[10px] font-mono border-0">
-            {modifierGroups.length}
-          </Badge>
-        </button>
+        {isRestaurant && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('modifiers')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'modifiers'
+                ? 'bg-white text-zinc-900 shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/50'
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-amber-600" />
+            <span>Central de Modais & Opcionais</span>
+            <Badge className="ml-1 bg-amber-100 text-amber-900 text-[10px] font-mono border-0">
+              {modifierGroups.length}
+            </Badge>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('self_order')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'self_order'
-              ? 'bg-white text-zinc-900 shadow-xs'
-              : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/50'
-          }`}
-        >
-          <Tablet className="w-4 h-4 text-emerald-600" />
-          <span>Terminal de Mesa & Autoatendimento</span>
-        </button>
+        {isRestaurant && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('self_order')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'self_order'
+                ? 'bg-white text-zinc-900 shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/50'
+            }`}
+          >
+            <Tablet className="w-4 h-4 text-emerald-600" />
+            <span>Terminal de Mesa & Autoatendimento</span>
+          </button>
+        )}
 
         <button
           type="button"
@@ -382,7 +419,146 @@ export const StoreSettingsPage: React.FC = () => {
           <FileCheck className="w-4 h-4 text-indigo-600" />
           <span>Frente de Caixa & Fiscal</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('branding')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'branding'
+              ? 'bg-white text-zinc-900 shadow-xs'
+              : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/50'
+          }`}
+        >
+          <Palette className="w-4 h-4 text-fuchsia-600" />
+          <span>Personalização</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('pix')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'pix'
+              ? 'bg-white text-zinc-900 shadow-xs'
+              : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/50'
+          }`}
+        >
+          <QrCode className="w-4 h-4 text-green-600" />
+          <span>Pagamentos & PIX</span>
+        </button>
       </div>
+
+      {/* ─── ABA: PERSONALIZAÇÃO (logo do estabelecimento) ─── */}
+      {activeTab === 'branding' && <BrandingLogoSettings />}
+
+      {/* ─── ABA: PAGAMENTOS & PIX ─── */}
+      {activeTab === 'pix' && (
+        <div className="space-y-6">
+          <div className="rounded-3xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white p-6 shadow-xs space-y-5">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge className="bg-green-500/10 text-green-800 text-[10px] font-black uppercase tracking-wider border-green-500/20">
+                  Recebimento Instantâneo
+                </Badge>
+              </div>
+              <h2 className="text-base font-black text-zinc-900 mt-1">Configuração de Chave PIX</h2>
+              <p className="text-xs text-zinc-500 mt-0.5 max-w-2xl">
+                Configure a chave PIX para receber pagamentos da empresa.
+                O QR Code será gerado automaticamente na hora do pagamento.
+              </p>
+            </div>
+
+            {/* Status Badge */}
+            {pixStatus && (
+              <div
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border ${
+                  pixStatus.configured && pixStatus.valid
+                    ? 'bg-green-50 border-green-200 text-green-800'
+                    : pixStatus.configured
+                    ? 'bg-red-50 border-red-200 text-red-800'
+                    : 'bg-zinc-100 border-zinc-200 text-zinc-600'
+                }`}
+              >
+                <QrCode className="w-3.5 h-3.5 shrink-0" />
+                {pixStatus.configured && pixStatus.valid
+                  ? `✓ Chave ${pixStatus.type} configurada e válida`
+                  : pixStatus.configured
+                  ? `✗ Chave inválida: ${pixStatus.reason}`
+                  : 'Nenhuma chave PIX configurada'}
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveGeneral(e);
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1.5">
+                    Chave PIX
+                    <span className="text-zinc-400 font-normal ml-1">(CPF, CNPJ, e-mail, telefone ou chave aleatória)</span>
+                  </label>
+                  <Input
+                    value={pixKey}
+                    onChange={(e) => setPixKey(e.target.value)}
+                    placeholder="Ex: 00.000.000/0000-00 ou email@empresa.com"
+                    className="h-11 rounded-xl border-zinc-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1.5">
+                    Nome do Recebedor
+                    <span className="text-zinc-400 font-normal ml-1">(aparece no comprovante do cliente)</span>
+                  </label>
+                  <Input
+                    value={pixReceiverName}
+                    onChange={(e) => setPixReceiverName(e.target.value)}
+                    placeholder="Ex: Loja Modelo"
+                    className="h-11 rounded-xl border-zinc-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1.5">
+                    Cidade do Recebedor
+                    <span className="text-zinc-400 font-normal ml-1">(obrigatório pelo Banco Central)</span>
+                  </label>
+                  <Input
+                    value={pixReceiverCity}
+                    onChange={(e) => setPixReceiverCity(e.target.value)}
+                    placeholder="Ex: São Paulo"
+                    className="h-11 rounded-xl border-zinc-200"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <Button
+                  type="submit"
+                  disabled={saveMutation.isPending}
+                  className="h-11 px-6 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-xs uppercase tracking-wider"
+                >
+                  {saveMutation.isPending ? 'Salvando...' : 'Salvar configurações PIX'}
+                </Button>
+              </div>
+            </form>
+
+            {/* Info block */}
+            <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4 space-y-1.5 text-xs text-blue-700">
+              <p className="font-black">Como funciona</p>
+              <p>• No fechamento da conta, o garçom escolhe a forma de pagamento.</p>
+              <p>• Ao selecionar PIX, o sistema gera o QR Code automaticamente com o valor exato da comanda.</p>
+              <p>• O cliente escaneia com qualquer app de banco e o pagamento é confirmado instantaneamente.</p>
+              <p className="mt-2 font-bold text-blue-900">
+                Tipos aceitos: CPF, CNPJ, e-mail, telefone (+5511...) ou chave aleatória (UUID).
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── ABA 4: CENTRAL DE MODAIS & GRUPOS DE PERSONALIZAÇÃO ─── */}
       {activeTab === 'modifiers' && (
@@ -734,11 +910,11 @@ export const StoreSettingsPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <label className="block font-semibold text-zinc-700 mb-1">Nome Fantasia da Loja / Restaurante</label>
+                <label className="block font-semibold text-zinc-700 mb-1">Nome Fantasia da Loja / Empresa</label>
                 <Input
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
-                  placeholder="Ex: Restaurante Japonês & Carnes"
+                  placeholder="Ex: Comércio & Serviços"
                   className="h-9 text-xs rounded-xl"
                 />
               </div>

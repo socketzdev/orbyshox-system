@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   ArrowRight,
   Info,
+  RotateCcw,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
 import { useTenant } from '../context/tenant-context';
@@ -35,6 +36,7 @@ import {
   SheetContent,
 } from '@/components/ui/sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { PurchasePaymentSection } from './purchase-payment-section';
 
 export interface PurchaseNoteItem {
   id: string;
@@ -43,6 +45,8 @@ export interface PurchaseNoteItem {
   quantity: string;
   status: 'PENDING' | 'BOUGHT' | 'NOT_BOUGHT';
   buyerNotes?: string | null;
+  priceCents?: number | null;
+  paymentMethod?: string | null;
   createdAt: string;
 }
 
@@ -55,6 +59,10 @@ export interface PurchaseNote {
   createdByName?: string | null;
   buyerName?: string | null;
   notes?: string | null;
+  totalCents?: number | null;
+  paymentsJson?: string | null;
+  paidAt?: string | null;
+  supplierName?: string | null;
   createdAt: string;
   updatedAt: string;
   items: PurchaseNoteItem[];
@@ -107,13 +115,13 @@ export function PurchaseNotesPage() {
   const [extraItemName, setExtraItemName] = useState('');
   const [extraItemQuantity, setExtraItemQuantity] = useState('');
 
-  // Query das notas
+  // Query das notas: busca SEMPRE a lista completa (sem filtro de status no
+  // servidor). O filtro por status é client-side — assim os contadores das
+  // pills fecham e a nota aberta no detalhe nunca some no meio do uso (ex.:
+  // marcou um item e ela mudou de PENDENTE para EM COMPRA).
   const { data: notes = [], isLoading, refetch } = useQuery<PurchaseNote[]>({
-    queryKey: ['purchase-notes', slug, statusFilter],
-    queryFn: () =>
-      apiGet(`/tenant-app/${slug}/purchase-notes`, {
-        status: statusFilter !== 'ALL' ? statusFilter : undefined,
-      }),
+    queryKey: ['purchase-notes', slug],
+    queryFn: () => apiGet(`/tenant-app/${slug}/purchase-notes`),
     enabled: !!slug,
     refetchInterval: 10000,
   });
@@ -135,18 +143,20 @@ export function PurchaseNotesPage() {
     };
   }, [notes]);
 
-  // Notas filtradas por busca
+  // Notas filtradas por status + busca (tudo client-side sobre a lista completa).
   const filteredNotes = useMemo(() => {
-    if (!searchTerm.trim()) return notes;
-    const term = searchTerm.toLowerCase();
-    return notes.filter(
-      (n) =>
+    const term = searchTerm.trim().toLowerCase();
+    return notes.filter((n) => {
+      if (statusFilter !== 'ALL' && n.status !== statusFilter) return false;
+      if (!term) return true;
+      return (
         n.title.toLowerCase().includes(term) ||
         (n.createdByName && n.createdByName.toLowerCase().includes(term)) ||
         (n.buyerName && n.buyerName.toLowerCase().includes(term)) ||
-        n.items.some((i) => i.itemName.toLowerCase().includes(term)),
-    );
-  }, [notes, searchTerm]);
+        n.items.some((i) => i.itemName.toLowerCase().includes(term))
+      );
+    });
+  }, [notes, searchTerm, statusFilter]);
 
   // Mutação: Criar Nova Nota
   const createMutation = useMutation({
@@ -602,6 +612,20 @@ export function PurchaseNotesPage() {
 
                 {/* Footer Progress & Quick Action */}
                 <div className="pt-3 border-t border-zinc-100 mt-2">
+                  {/* Valor pago (quando confirmado financeiramente) */}
+                  {(note as any).paidAt && (
+                    <div className="flex items-center justify-between mb-2 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/70">
+                      <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wide">
+                        Pago
+                      </span>
+                      <span className="text-sm font-black text-emerald-900 font-mono">
+                        {(Number((note as any).totalCents || 0) / 100).toLocaleString('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                        })}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1.5">
                     <span>
                       {bought} de {total} comprados
@@ -876,7 +900,7 @@ export function PurchaseNotesPage() {
                   return (
                     <div
                       key={item.id}
-                      className={`p-3.5 rounded-2xl border transition-all ${
+                      className={`p-4 rounded-2xl border transition-all ${
                         isBought
                           ? 'bg-emerald-50/50 border-emerald-200/80'
                           : isNotBought
@@ -884,11 +908,11 @@ export function PurchaseNotesPage() {
                           : 'bg-zinc-50/70 border-zinc-200'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`text-sm font-bold ${
+                              className={`text-[15px] font-bold ${
                                 isBought
                                   ? 'line-through text-emerald-900/60'
                                   : isNotBought
@@ -898,7 +922,7 @@ export function PurchaseNotesPage() {
                             >
                               {item.itemName}
                             </span>
-                            <span className="px-2 py-0.5 rounded-md bg-white border border-zinc-200/70 font-mono text-xs font-semibold text-zinc-700">
+                            <span className="px-2.5 py-1 rounded-md bg-white border border-zinc-200/70 font-mono text-xs font-semibold text-zinc-700 shrink-0">
                               {item.quantity}
                             </span>
                           </div>
@@ -914,16 +938,17 @@ export function PurchaseNotesPage() {
                           )}
                         </div>
 
-                        {/* Botões de Ação do Comprador */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Botões de Ação do Comprador (alvos grandes p/ dedo no celular) */}
+                        <div className="flex items-center gap-2">
                           {isBought ? (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs font-bold text-emerald-700 px-2.5 py-1 bg-emerald-100 rounded-xl flex items-center gap-1">
-                                <Check className="w-3.5 h-3.5" /> Comprado
+                            <>
+                              <span className="flex-1 text-sm font-bold text-emerald-700 px-3 min-h-[48px] bg-emerald-100 rounded-xl flex items-center justify-center gap-1.5">
+                                <Check className="w-4 h-4" /> Comprado
                               </span>
                               <button
                                 type="button"
                                 title="Desfazer"
+                                aria-label="Desfazer"
                                 onClick={() =>
                                   updateItemMutation.mutate({
                                     noteId: selectedNote.id,
@@ -931,19 +956,20 @@ export function PurchaseNotesPage() {
                                     status: 'PENDING',
                                   })
                                 }
-                                className="text-[11px] text-zinc-400 hover:text-zinc-700 px-1.5 py-1"
+                                className="w-12 h-12 rounded-xl text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/70 flex items-center justify-center shrink-0 border border-zinc-200 bg-white cursor-pointer"
                               >
-                                ↺
+                                <RotateCcw className="w-4 h-4" />
                               </button>
-                            </div>
+                            </>
                           ) : isNotBought ? (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs font-bold text-rose-700 px-2.5 py-1 bg-rose-100 rounded-xl flex items-center gap-1">
-                                <X className="w-3.5 h-3.5" /> Não comprado
+                            <>
+                              <span className="flex-1 text-sm font-bold text-rose-700 px-3 min-h-[48px] bg-rose-100 rounded-xl flex items-center justify-center gap-1.5">
+                                <X className="w-4 h-4" /> Não comprado
                               </span>
                               <button
                                 type="button"
                                 title="Desfazer"
+                                aria-label="Desfazer"
                                 onClick={() =>
                                   updateItemMutation.mutate({
                                     noteId: selectedNote.id,
@@ -951,11 +977,11 @@ export function PurchaseNotesPage() {
                                     status: 'PENDING',
                                   })
                                 }
-                                className="text-[11px] text-zinc-400 hover:text-zinc-700 px-1.5 py-1"
+                                className="w-12 h-12 rounded-xl text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/70 flex items-center justify-center shrink-0 border border-zinc-200 bg-white cursor-pointer"
                               >
-                                ↺
+                                <RotateCcw className="w-4 h-4" />
                               </button>
-                            </div>
+                            </>
                           ) : (
                             <>
                               <Button
@@ -968,9 +994,9 @@ export function PurchaseNotesPage() {
                                     buyerName: currentUser?.name || selectedNote.buyerName || 'Comprador',
                                   })
                                 }
-                                className="h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 gap-1 shadow-2xs"
+                                className="flex-1 min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-3 gap-1.5 shadow-2xs"
                               >
-                                <Check className="w-3.5 h-3.5" />
+                                <Check className="w-4 h-4" />
                                 <span>Comprado</span>
                               </Button>
 
@@ -984,9 +1010,9 @@ export function PurchaseNotesPage() {
                                     reason: '',
                                   })
                                 }
-                                className="h-8 rounded-xl border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold px-2.5 gap-1"
+                                className="flex-1 min-h-[48px] rounded-xl border-rose-300 text-rose-700 hover:bg-rose-50 text-sm font-bold px-3 gap-1.5"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-4 h-4" />
                                 <span>Não achei</span>
                               </Button>
                             </>
@@ -1056,6 +1082,11 @@ export function PurchaseNotesPage() {
                     <span>Lembrou de algo? Adicionar item à nota</span>
                   </Button>
                 )}
+              </div>
+
+              {/* Pagamento + abatimento no caixa do turno */}
+              <div className="px-6 pb-2">
+                <PurchasePaymentSection key={selectedNote.id} note={selectedNote} slug={slug} />
               </div>
 
               {/* Footer do Sheet */}

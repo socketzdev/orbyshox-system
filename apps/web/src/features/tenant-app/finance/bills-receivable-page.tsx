@@ -51,6 +51,7 @@ export const BillsReceivablePage: React.FC = () => {
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['bills-receivable', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/finance/receivables`),
+    refetchInterval: 15000,
   });
 
   const { data: customers = [] } = useQuery({
@@ -246,7 +247,7 @@ export const BillsReceivablePage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[700px] text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50/40 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                 <th className="py-3 px-4">Descrição</th>

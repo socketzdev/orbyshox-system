@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
 import { useTenant } from '../context/tenant-context';
+import { cargoLabel, parseTags } from './team-roles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -40,9 +41,10 @@ type Employee = {
   id: string;
   name: string;
   email: string;
-  role: 'TENANT_ADMIN' | 'TENANT_EMPLOYEE';
+  role: string;
   phone: string | null;
   position: string | null;
+  tags?: string | string[] | null;
   isActive: boolean;
   is2faEnabled: boolean;
   lastLoginAt: string | null;
@@ -70,6 +72,7 @@ export const TeamListPage: React.FC = () => {
   const { data, isLoading } = useQuery<{ employees: Employee[] }>({
     queryKey: ['tenant-employees', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/employees`),
+    refetchInterval: 30000,
   });
 
   const toggleActive = useMutation({
@@ -289,23 +292,27 @@ export const TeamListPage: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-4">
-                        {emp.role === 'TENANT_ADMIN' ? (
-                          <Badge
-                            variant="amber"
-                            className="text-[10px] font-bold uppercase tracking-wider"
-                          >
+                        <Badge
+                          variant={emp.role === 'TENANT_ADMIN' ? 'amber' : 'zinc'}
+                          className="text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {emp.role === 'TENANT_ADMIN' ? (
                             <ShieldCheck className="w-3 h-3 mr-1" />
-                            Admin
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="zinc"
-                            className="text-[10px] font-bold uppercase tracking-wider"
-                          >
+                          ) : (
                             <UserIcon className="w-3 h-3 mr-1" />
-                            Operador
-                          </Badge>
-                        )}
+                          )}
+                          {cargoLabel(emp.role, emp.position)}
+                        </Badge>
+                        {parseTags((emp as any).tags).includes('CLEANING') &&
+                          emp.role !== 'CLEANING' && (
+                            <Badge
+                              variant="emerald"
+                              className="text-[9px] font-bold ml-1.5 px-1.5 py-0"
+                              title="Acumula limpeza/serviços gerais"
+                            >
+                              + Limpeza
+                            </Badge>
+                          )}
                         {emp.is2faEnabled && (
                           <Badge
                             variant="emerald"

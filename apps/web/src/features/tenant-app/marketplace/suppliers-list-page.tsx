@@ -70,7 +70,13 @@ const formatCnpj = (raw: string) => {
 };
 
 export const SuppliersListPage: React.FC = () => {
-  const { slug, base } = useTenant();
+  const { slug, base, abilities } = useTenant();
+
+  // Permissões resolvidas pelo backend — mesma matriz que bloqueia as rotas.
+  const can = {
+    deleteSupplier: abilities.canDeleteSupplier,
+    updateSupplier: abilities.canUpdateSupplier,
+  };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -81,6 +87,7 @@ export const SuppliersListPage: React.FC = () => {
   const { data: suppliers = [], isLoading } = useQuery<Supplier[]>({
     queryKey: ['suppliers', slug, statusFilter],
     queryFn: () => apiGet(`/tenant-app/${slug}/suppliers`, { active: statusFilter === 'active' ? 'true' : statusFilter === 'inactive' ? 'false' : undefined }),
+    refetchInterval: 30000,
   });
 
   const filtered = suppliers.filter((s) => {
@@ -287,13 +294,18 @@ export const SuppliersListPage: React.FC = () => {
                           <Power className="w-3.5 h-3.5" />
                           {s.isActive ? 'Desativar' : 'Ativar'}
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setSupplierToRemove(s)}
-                          className="text-xs gap-2 rounded-lg cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Remover
-                        </DropdownMenuItem>
+                        {/* Exclusão de fornecedor é irreversível e só o
+                            TENANT_ADMIN pode fazê-la — some do menu para os
+                            demais papéis em vez de devolver 403 no clique. */}
+                        {can.deleteSupplier && (
+                          <DropdownMenuItem
+                            onSelect={() => setSupplierToRemove(s)}
+                            className="text-xs gap-2 rounded-lg cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remover
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </CossTableCell>

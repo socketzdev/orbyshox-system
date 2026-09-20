@@ -5,8 +5,6 @@ import {
   Users,
   Save,
   ArrowLeft,
-  ShieldCheck,
-  User as UserIcon,
   Eye,
   EyeOff,
   KeyRound,
@@ -19,14 +17,16 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { CARGOS, parseTags } from './team-roles';
 
 type Employee = {
   id: string;
   name: string;
   email: string;
-  role: 'TENANT_ADMIN' | 'TENANT_EMPLOYEE';
+  role: string;
   phone: string | null;
   position: string | null;
+  tags?: string | string[] | null;
   isActive: boolean;
 };
 
@@ -35,9 +35,10 @@ type FormState = {
   email: string;
   password: string;
   confirmPassword: string;
-  role: 'TENANT_ADMIN' | 'TENANT_EMPLOYEE';
+  cargoId: string;
   phone: string;
   position: string;
+  accumulateCleaning: boolean;
   isActive: boolean;
 };
 
@@ -46,9 +47,10 @@ const EMPTY: FormState = {
   email: '',
   password: '',
   confirmPassword: '',
-  role: 'TENANT_EMPLOYEE',
+  cargoId: 'waiter',
   phone: '',
-  position: '',
+  position: 'Garçom',
+  accumulateCleaning: false,
   isActive: true,
 };
 
@@ -75,14 +77,22 @@ export const TeamFormPage: React.FC = () => {
 
   useEffect(() => {
     if (employee && isEdit) {
+      const tags = parseTags((employee as any).tags);
+      const role = (employee.role || '').toUpperCase();
+      const pos = (employee.position || '').toLowerCase();
+      const cargo =
+        CARGOS.find((c) => c.role === role && pos.includes(c.position.toLowerCase())) ||
+        CARGOS.find((c) => c.role === role) ||
+        CARGOS[2];
       setForm({
         name: employee.name,
         email: employee.email,
         password: '',
         confirmPassword: '',
-        role: employee.role,
+        cargoId: cargo.id,
         phone: employee.phone || '',
-        position: employee.position || '',
+        position: employee.position || cargo.position,
+        accumulateCleaning: tags.includes('CLEANING') && cargo.id !== 'cleaning',
         isActive: employee.isActive,
       });
     }
@@ -173,12 +183,15 @@ export const TeamFormPage: React.FC = () => {
     e.preventDefault();
     if (!validate()) return;
 
+    const cargo = CARGOS.find((c) => c.id === form.cargoId) || CARGOS[2];
     const payload: any = {
       name: form.name.trim(),
       email: form.email.trim().toLowerCase(),
-      role: form.role,
+      role: cargo.role,
       phone: form.phone.trim() || null,
-      position: form.position.trim() || null,
+      position: form.position.trim() || cargo.position,
+      // Limpeza acumulável: garçom/cozinheiro que também faz serviços gerais.
+      tags: form.accumulateCleaning && cargo.id !== 'cleaning' ? ['CLEANING'] : [],
       isActive: form.isActive,
     };
     if (form.password) payload.password = form.password;
@@ -409,6 +422,32 @@ export const TeamFormPage: React.FC = () => {
                   onChange={(e) => set('position', e.target.value)}
                   placeholder="Ex: Atendente, Garçom, Barbeiro"
                 />
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    { label: '🍽️ Garçom', pos: 'Garçom', cargoId: 'waiter' },
+                    { label: '👨‍🍳 Cozinheiro', pos: 'Cozinheiro', cargoId: 'cook' },
+                    { label: '🔥 Chapista', pos: 'Chapista', cargoId: 'grill' },
+                    { label: '💳 Caixa', pos: 'Operador de Caixa', cargoId: 'cashier' },
+                    { label: '🧹 Limpeza', pos: 'Limpeza', cargoId: 'cleaning' },
+                    { label: '👑 Gerente', pos: 'Gerente', cargoId: 'manager' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.pos}
+                      type="button"
+                      onClick={() => {
+                        set('position', preset.pos);
+                        set('cargoId', preset.cargoId);
+                      }}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        form.position.toLowerCase() === preset.pos.toLowerCase()
+                          ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                          : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 border-zinc-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -435,60 +474,46 @@ export const TeamFormPage: React.FC = () => {
           <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-soft p-6 space-y-4">
             <div>
               <h2 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
-                Perfil de acesso
+                Cargo & permissões
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Define as permissões deste usuário dentro do painel.
+                O cargo libera só as telas da função. O menu e as rotas obedecem sozinhos.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5">
-              {(
-                [
-                  {
-                    role: 'TENANT_ADMIN',
-                    label: 'Administrador',
-                    desc: 'Acesso total, pode gerenciar equipe e financeiro.',
-                    icon: ShieldCheck,
-                    tone: 'amber',
-                  },
-                  {
-                    role: 'TENANT_EMPLOYEE',
-                    label: 'Operador',
-                    desc: 'Acesso operacional: PDV, agenda e clientes.',
-                    icon: UserIcon,
-                    tone: 'zinc',
-                  },
-                ] as const
-              ).map((opt) => {
-                const selected = form.role === opt.role;
-                const Icon = opt.icon;
+            <div className="grid grid-cols-1 gap-2">
+              {CARGOS.map((cargo) => {
+                const selected = form.cargoId === cargo.id;
+                const isAdminOpt = cargo.id === 'admin';
                 return (
                   <button
-                    key={opt.role}
+                    key={cargo.id}
                     type="button"
-                    onClick={() => set('role', opt.role)}
-                    className={`text-left rounded-xl border p-3.5 transition-all ${
+                    onClick={() => {
+                      set('cargoId', cargo.id);
+                      if (!form.position.trim() || CARGOS.some((c) => c.position === form.position.trim())) {
+                        set('position', cargo.position);
+                      }
+                    }}
+                    className={`text-left rounded-xl border p-3 transition-all ${
                       selected
-                        ? opt.tone === 'amber'
+                        ? isAdminOpt
                           ? 'border-amber-400 bg-amber-50/40'
-                          : 'border-zinc-400 bg-zinc-50/50'
+                          : 'border-zinc-900 bg-zinc-50/60'
                         : 'border-zinc-200 hover:border-zinc-300 bg-white'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                       <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                          opt.tone === 'amber'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-zinc-100 text-zinc-700'
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm font-black ${
+                          isAdminOpt ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-700'
                         }`}
                       >
-                        <Icon className="w-4 h-4" />
+                        {cargo.label.charAt(0)}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-                          {opt.label}
+                          {cargo.label}
                           {selected && (
                             <Badge
                               variant="emerald"
@@ -499,7 +524,7 @@ export const TeamFormPage: React.FC = () => {
                           )}
                         </div>
                         <div className="text-[11px] text-zinc-500 mt-0.5 leading-snug">
-                          {opt.desc}
+                          {cargo.description}
                         </div>
                       </div>
                     </div>
@@ -508,9 +533,57 @@ export const TeamFormPage: React.FC = () => {
               })}
             </div>
 
-            {isSelf && form.role !== 'TENANT_ADMIN' && (
+            {/* Prévia do que o cargo enxerga */}
+            {(() => {
+              const cargo = CARGOS.find((c) => c.id === form.cargoId);
+              if (!cargo) return null;
+              return (
+                <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-1.5">
+                    Telas liberadas
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cargo.modules.map((m) => (
+                      <span
+                        key={m}
+                        className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white border border-zinc-200 text-zinc-700"
+                      >
+                        {m}
+                      </span>
+                    ))}
+                    {form.accumulateCleaning && cargo.id !== 'cleaning' && (
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-100 border border-emerald-200 text-emerald-800">
+                        + Rotinas de limpeza
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Limpeza acumulável (garçom/cozinheiro que também limpa) */}
+            {form.cargoId !== 'cleaning' && (
+              <label className="flex items-start gap-2.5 rounded-xl border border-zinc-200 p-3 cursor-pointer hover:border-zinc-300 transition">
+                <input
+                  type="checkbox"
+                  checked={form.accumulateCleaning}
+                  onChange={(e) => set('accumulateCleaning', e.target.checked)}
+                  className="w-4 h-4 rounded mt-0.5"
+                />
+                <span>
+                  <span className="text-xs font-bold text-zinc-900 block">
+                    🧹 Acumula limpeza / serviços gerais
+                  </span>
+                  <span className="text-[11px] text-zinc-500 block mt-0.5">
+                    Soma as rotinas de limpeza sem trocar o cargo (p/ quem não tem equipe exclusiva).
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {isSelf && form.cargoId !== 'admin' && (
               <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800">
-                <strong>Atenção:</strong> você está rebaixando seu próprio perfil. Isso pode
+                <strong>Atenção:</strong> você está abrindo mão do acesso total. Isso pode
                 bloquear o seu acesso se não houver outro administrador.
               </div>
             )}
@@ -541,11 +614,11 @@ export const TeamFormPage: React.FC = () => {
               <Switch
                 checked={form.isActive}
                 onCheckedChange={(v) => set('isActive', v)}
-                disabled={isSelf && form.isActive && form.role === 'TENANT_ADMIN'}
+                disabled={isSelf && form.isActive && form.cargoId === 'admin'}
               />
             </div>
 
-            {isSelf && form.isActive && form.role === 'TENANT_ADMIN' && (
+            {isSelf && form.isActive && form.cargoId === 'admin' && (
               <p className="text-[11px] text-zinc-500">
                 Você não pode desativar o seu próprio perfil de administrador.
               </p>

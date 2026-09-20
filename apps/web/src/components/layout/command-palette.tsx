@@ -173,8 +173,6 @@ export const CommandPalette: React.FC = () => {
     return [
       { id: 'nav-dashboard', title: 'Ir para Dashboard', subtitle: 'Visão geral', icon: LayoutDashboard, group: 'navigation', shortcut: 'G D', keywords: ['dashboard', 'inicio', 'home'], perform: () => goTo('/dashboard') },
       { id: 'nav-tenants', title: 'Gerenciar Clientes', subtitle: 'Tenants e assinaturas', icon: Building2, group: 'navigation', shortcut: 'G T', keywords: ['clientes', 'tenants', 'empresas'], perform: () => goTo('/tenants') },
-      { id: 'nav-plans', title: 'Planos & Preços', subtitle: 'Catálogo comercial', icon: Layers, group: 'navigation', keywords: ['planos', 'preços', 'plans'], perform: () => goTo('/plans') },
-      { id: 'nav-coupons', title: 'Cupons de Desconto', subtitle: 'Promoções ativas', icon: CreditCard, group: 'navigation', keywords: ['cupons', 'promo', 'coupons'], perform: () => goTo('/coupons') },
       { id: 'nav-billing', title: 'Visão Financeira', subtitle: 'Faturamento consolidado', icon: LayoutDashboard, group: 'navigation', keywords: ['financeiro', 'faturas', 'billing'], perform: () => goTo('/billing') },
       { id: 'nav-invoices', title: 'Faturas & Cobranças', subtitle: 'Histórico de pagamentos', icon: CreditCard, group: 'navigation', keywords: ['faturas', 'cobranca'], perform: () => goTo('/billing/invoices') },
       { id: 'nav-delinquency', title: 'Inadimplência', subtitle: 'Clientes em risco', icon: Sliders, group: 'navigation', keywords: ['inadimplencia', 'atraso'], perform: () => goTo('/billing/delinquency') },

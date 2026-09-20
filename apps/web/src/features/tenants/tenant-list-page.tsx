@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -49,11 +49,14 @@ import {
   Clock,
   Ban,
   RotateCcw,
+  Trash2,
   X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { downloadCSV } from '@/lib/export';
+import { setViewingSlug } from '@/lib/auth';
+import { BARBERSHOP_TEMPLATES } from '@projeto-saas/shared-types';
 import { toast } from 'sonner';
 import { CreateTenantModal } from './components/create-tenant-modal';
 
@@ -77,7 +80,7 @@ export const TenantListPage: React.FC = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [actionModal, setActionModal] = useState<{
     open: boolean;
-    type: 'suspend' | 'reactivate' | 'cancel' | 'extendTrial';
+    type: 'suspend' | 'reactivate' | 'cancel' | 'extendTrial' | 'delete';
     tenant: any | null;
   }>({
     open: false,
@@ -85,6 +88,7 @@ export const TenantListPage: React.FC = () => {
     tenant: null,
   });
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
 
   useEffect(() => {
     const urlStatus = searchParams.get('status');
@@ -125,14 +129,14 @@ export const TenantListPage: React.FC = () => {
     const suspended = rawTenants.filter((t: any) => t.status === 'SUSPENDED' || t.status === 'CANCELED').length;
     const restaurants = rawTenants.filter((t: any) => t.niche === 'RESTAURANT').length;
     const barbers = rawTenants.filter((t: any) => t.niche === 'BARBERSHOP').length;
-    const markets = rawTenants.filter((t: any) => t.niche === 'SUPERMARKET').length;
+    const universals = rawTenants.filter((t: any) => t.niche === 'UNIVERSAL' || t.niche === 'SUPERMARKET').length;
 
     const totalMrr = rawTenants.reduce((acc: number, t: any) => {
       const price = t.subscriptions?.[0]?.plan?.price || t.subscription?.price || 19900;
       return acc + price;
     }, 0);
 
-    return { total, active, trial, pastDue, suspended, restaurants, barbers, markets, totalMrr };
+    return { total, active, trial, pastDue, suspended, restaurants, barbers, markets: universals, totalMrr };
   }, [rawTenants]);
 
   // Filter and sort data
@@ -223,6 +227,9 @@ export const TenantListPage: React.FC = () => {
       } else if (actionModal.type === 'cancel') {
         await apiPost(`/tenants/${id}/cancel`, {});
         toast.success(`Contrato da empresa "${displayName}" cancelado.`);
+      } else if (actionModal.type === 'delete') {
+        await apiDelete(`/tenants/${id}`);
+        toast.success(`Empresa "${displayName}" excluída definitivamente.`);
       }
 
       await queryClient.invalidateQueries({ queryKey: ['tenants'] });
@@ -330,7 +337,7 @@ export const TenantListPage: React.FC = () => {
           <div className="mt-4 space-y-1.5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-zinc-500 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-indigo-500" /> Supermercados
+                <span className="w-2 h-2 rounded-full bg-indigo-500" /> Universal
               </span>
               <span className="font-semibold text-zinc-800">{kpis.markets}</span>
             </div>
@@ -381,7 +388,7 @@ export const TenantListPage: React.FC = () => {
           <div className="flex items-center bg-zinc-100/80 p-0.5 rounded-xl border border-zinc-200/50">
             {[
               { id: 'ALL', label: 'Todos' },
-              { id: 'SUPERMARKET', label: 'Mercados' },
+              { id: 'UNIVERSAL', label: 'Universal' },
               { id: 'BARBERSHOP', label: 'Barbearias' },
               { id: 'RESTAURANT', label: 'Restaurantes' },
             ].map((tab) => {
@@ -491,15 +498,28 @@ export const TenantListPage: React.FC = () => {
                     .join('')
                     .toUpperCase();
 
-                  // Segmento com fonte moderna e cores elegantes
+                  // Segmento com fonte moderna e cores elegantes.
+                  // Na barbearia vale o sub-template (Loja de Roupa, Salão...),
+                  // não o rótulo genérico.
+                  const subTpl =
+                    tenantNiche === 'BARBERSHOP' && (tenant as any).companyCategory
+                      ? (BARBERSHOP_TEMPLATES as Record<string, { label: string }>)[
+                          String((tenant as any).companyCategory).toUpperCase()
+                        ]
+                      : null;
                   const segmentBadge = {
+                    UNIVERSAL: {
+                      label: 'Universal',
+                      className: 'bg-[#f0f4ff] text-[#4338ca] border-[#e0e7ff]',
+                      icon: <ShoppingCart className="w-3 h-3 text-[#4f46e5]" />,
+                    },
                     SUPERMARKET: {
-                      label: 'Supermercado',
+                      label: 'Universal',
                       className: 'bg-[#f0f4ff] text-[#4338ca] border-[#e0e7ff]',
                       icon: <ShoppingCart className="w-3 h-3 text-[#4f46e5]" />,
                     },
                     BARBERSHOP: {
-                      label: 'Barbearia',
+                      label: subTpl ? subTpl.label : 'Barbearia',
                       className: 'bg-[#ecfdf5] text-[#047857] border-[#d1fae5]',
                       icon: <Scissors className="w-3 h-3 text-[#059669]" />,
                     },
@@ -508,7 +528,7 @@ export const TenantListPage: React.FC = () => {
                       className: 'bg-[#fff7ed] text-[#c2410c] border-[#ffedd5]',
                       icon: <Store className="w-3 h-3 text-[#ea580c]" />,
                     },
-                  }[tenantNiche as 'SUPERMARKET' | 'BARBERSHOP' | 'RESTAURANT'] || {
+                  }[tenantNiche as 'SUPERMARKET' | 'UNIVERSAL' | 'BARBERSHOP' | 'RESTAURANT'] || {
                     label: tenantNiche,
                     className: 'bg-zinc-100 text-zinc-700 border-zinc-200',
                     icon: <Building2 className="w-3 h-3 text-zinc-500" />,
@@ -641,6 +661,7 @@ export const TenantListPage: React.FC = () => {
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (slug) setViewingSlug(slug);
                                 window.open('/app/dashboard', '_blank');
                               }}
                               className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-semibold text-zinc-900 hover:bg-zinc-50 cursor-pointer"
@@ -740,6 +761,25 @@ export const TenantListPage: React.FC = () => {
                                 <span>Cancelar Contrato</span>
                               </DropdownMenuItem>
                             )}
+
+                            <DropdownMenuSeparator className="bg-zinc-100 my-1" />
+
+                            {/* Excluir Definitivo (zona de perigo) */}
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmName('');
+                                setActionModal({
+                                  open: true,
+                                  type: 'delete',
+                                  tenant,
+                                });
+                              }}
+                              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-white bg-rose-600 hover:bg-rose-700 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Excluir Empresa</span>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -833,6 +873,7 @@ export const TenantListPage: React.FC = () => {
                 {actionModal.type === 'reactivate' && <RotateCcw className="w-5 h-5" />}
                 {actionModal.type === 'extendTrial' && <Clock className="w-5 h-5" />}
                 {actionModal.type === 'cancel' && <AlertTriangle className="w-5 h-5" />}
+                {actionModal.type === 'delete' && <Trash2 className="w-5 h-5" />}
               </div>
               <div>
                 <DialogTitle className="text-base font-bold text-zinc-900">
@@ -840,9 +881,12 @@ export const TenantListPage: React.FC = () => {
                   {actionModal.type === 'reactivate' && 'Reativar Empresa'}
                   {actionModal.type === 'extendTrial' && 'Estender Período de Teste'}
                   {actionModal.type === 'cancel' && 'Confirmar Cancelamento'}
+                  {actionModal.type === 'delete' && 'Excluir Empresa Definitivamente'}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-zinc-500 mt-0.5">
-                  Ação operacional com reflexo imediato na plataforma.
+                  {actionModal.type === 'delete'
+                    ? 'Zona de perigo: esta ação não pode ser desfeita.'
+                    : 'Ação operacional com reflexo imediato na plataforma.'}
                 </DialogDescription>
               </div>
             </div>
@@ -876,6 +920,27 @@ export const TenantListPage: React.FC = () => {
                 As assinaturas serão encerradas no sistema.
               </p>
             )}
+            {actionModal.type === 'delete' && (
+              <div className="space-y-3">
+                <p className="text-rose-700 font-medium">
+                  Isso apaga <strong>todos</strong> os dados de{' '}
+                  <strong className="text-rose-950">{actionModal.tenant?.tradeName || actionModal.tenant?.companyName}</strong>:
+                  vendas, caixa, estoque, clientes, equipe, agendamentos e histórico. Não há como desfazer.
+                </p>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    Digite <span className="font-mono bg-zinc-100 px-1 rounded">{actionModal.tenant?.tradeName || actionModal.tenant?.companyName}</span> para confirmar
+                  </label>
+                  <Input
+                    value={deleteConfirmName}
+                    onChange={(e) => setDeleteConfirmName(e.target.value)}
+                    placeholder="Nome da empresa"
+                    className="h-9 text-xs rounded-xl"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex items-center justify-end gap-2 pt-2">
@@ -890,9 +955,16 @@ export const TenantListPage: React.FC = () => {
             </Button>
             <Button
               type="button"
-              disabled={actionLoading}
+              disabled={
+                actionLoading ||
+                (actionModal.type === 'delete' &&
+                  deleteConfirmName.trim().toLowerCase() !==
+                    String(actionModal.tenant?.tradeName || actionModal.tenant?.companyName || '')
+                      .trim()
+                      .toLowerCase())
+              }
               onClick={handleExecuteAction}
-              className={`h-8 px-4 rounded-xl text-xs font-semibold text-white shadow-2xs flex items-center gap-2 cursor-pointer ${
+              className={`h-8 px-4 rounded-xl text-xs font-semibold text-white shadow-2xs flex items-center gap-2 cursor-pointer disabled:opacity-40 ${
                 actionModal.type === 'suspend'
                   ? 'bg-amber-600 hover:bg-amber-700'
                   : actionModal.type === 'reactivate'

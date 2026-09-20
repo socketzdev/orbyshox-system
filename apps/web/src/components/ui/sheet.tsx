@@ -47,17 +47,27 @@ const sheetVariants = cva(
 
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
-    VariantProps<typeof sheetVariants> {}
+    VariantProps<typeof sheetVariants> {
+  /**
+   * Igual ao Dialog: não fecha clicando fora por padrão (toque acidental não
+   * pode descartar a tela). Passe `allowOutsideClose` para liberar.
+   */
+  allowOutsideClose?: boolean;
+}
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, allowOutsideClose = false, onPointerDownOutside, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
       ref={ref}
       className={cn(sheetVariants({ side }), className)}
+      onPointerDownOutside={(e) => {
+        if (!allowOutsideClose) e.preventDefault();
+        onPointerDownOutside?.(e);
+      }}
       {...props}
     >
       {children}

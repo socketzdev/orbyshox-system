@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { setViewingSlug } from '@/lib/auth';
+import { BARBERSHOP_TEMPLATES } from '@projeto-saas/shared-types';
 import { toast } from 'sonner';
 import {
   MoreVertical,
@@ -223,6 +225,11 @@ export const TenantDetailPage: React.FC = () => {
             </h1>
             {getStatusBadge(tenant.status)}
             <CossBadge variant="neutral">{tenant.niche}</CossBadge>
+            {(() => {
+              const cat = String((tenant as any)?.companyCategory || '').toUpperCase();
+              const tpl = (BARBERSHOP_TEMPLATES as Record<string, { label: string }>)[cat];
+              return tpl ? <CossBadge variant="neutral">{tpl.label}</CossBadge> : null;
+            })()}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
             <span>Cadastrado em {formatDate(tenant.createdAt)}</span>
@@ -244,7 +251,11 @@ export const TenantDetailPage: React.FC = () => {
             variant="outline"
             size="sm"
             className="h-9 rounded-xl border-zinc-200 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 shadow-2xs"
-            onClick={() => window.open('/app/dashboard', '_blank')}
+            onClick={() => {
+              if (tenant?.slug) setViewingSlug(tenant.slug);
+              window.open('/app/dashboard', '_blank');
+            }}
+            title={tenant?.slug ? `Abrir painel de ${tenant.tradeName || tenant.companyName}` : 'Abrir painel'}
           >
             <ExternalLink className="mr-1.5 h-3.5 w-3.5 text-zinc-500" /> Abrir painel
           </Button>

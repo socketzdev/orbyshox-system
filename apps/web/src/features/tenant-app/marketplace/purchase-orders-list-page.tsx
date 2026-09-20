@@ -59,6 +59,7 @@ export const PurchaseOrdersListPage: React.FC = () => {
   const { data: orders = [], isLoading } = useQuery<PurchaseOrder[]>({
     queryKey: ['purchase-orders', slug, statusFilter],
     queryFn: () => apiGet(`/tenant-app/${slug}/purchase-orders`, statusFilter === 'all' ? {} : { status: statusFilter }),
+    refetchInterval: 15000,
   });
 
   const { data: suggestions = [] } = useQuery<
@@ -66,6 +67,7 @@ export const PurchaseOrdersListPage: React.FC = () => {
   >({
     queryKey: ['purchase-suggestions', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/purchase-orders/suggestions`),
+    refetchInterval: 30000,
   });
 
   return (

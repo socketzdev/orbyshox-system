@@ -71,6 +71,7 @@ export const SupplierDetailPage: React.FC = () => {
     queryKey: ['supplier', slug, supplierId],
     queryFn: () => apiGet(`/tenant-app/${slug}/suppliers/${supplierId}`),
     enabled: !!supplierId,
+    refetchInterval: 30000,
   });
 
   const toggle = useMutation({

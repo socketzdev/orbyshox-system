@@ -76,6 +76,7 @@ export const PurchaseOrderDetailPage: React.FC = () => {
     queryKey: ['purchase-order', slug, orderId],
     queryFn: () => apiGet(`/tenant-app/${slug}/purchase-orders/${orderId}`),
     enabled: !!orderId,
+    refetchInterval: 15000,
   });
 
   const send = useMutation({

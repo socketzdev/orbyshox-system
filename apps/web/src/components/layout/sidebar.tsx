@@ -15,6 +15,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useSidebar } from '@/providers/sidebar-provider';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 // ─── 1. Emblema Geométrico de 4 Quadrantes (Logo) ─────────────────────────────
 export const QuadrantLogo: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
@@ -149,14 +151,23 @@ export function Sidebar() {
   const paymentAlert = alerts.find((a: any) => a.type === 'payment_failed');
 
   const isDashboard = location.pathname === '/dashboard' || location.pathname === '/';
+  const { mobileOpen, setMobileOpen } = useSidebar();
 
-  return (
-    <aside aria-label="Navegação principal" className="w-[260px] h-screen p-6 lg:p-7 flex flex-col justify-between shrink-0 select-none bg-zinc-50 dark:bg-zinc-900/60 font-sans border-r border-zinc-200/70 dark:border-zinc-800">
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname, setMobileOpen]);
+
+  const renderNavContent = () => (
+    <>
       <div className="overflow-y-auto pr-1 scrollbar-none">
         {/* ─── Logo do Topo com Orbyshox ─── */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <QuadrantLogo className="w-10 h-10" />
+            <img
+              src="/orbyshox-logo.png"
+              alt="Orbyshox"
+              className="w-10 h-10 rounded-xl object-contain bg-white shadow-2xs"
+            />
             <div>
               <span className="font-bold text-sm text-zinc-900 tracking-tight block">
                 Orbyshox
@@ -249,65 +260,6 @@ export function Sidebar() {
                     }
                   >
                     <span>Empresas</span>
-                  </NavLink>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Comercial (Planos & Cupons) */}
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => toggleGroup('commercial')}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-[14px] font-medium text-zinc-900 dark:text-zinc-100 transition-all hover:bg-white/50 dark:hover:bg-zinc-800/50"
-            >
-              <div className="flex items-center gap-3.5">
-                <IconCommercial className="w-4 h-4 text-zinc-700 shrink-0" />
-                <span className="font-semibold text-zinc-900">Comercial</span>
-              </div>
-              {openGroups.commercial ? (
-                <ChevronUp className="w-3.5 h-3.5 text-zinc-500 stroke-[2]" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-400 stroke-[2]" />
-              )}
-            </button>
-
-            {openGroups.commercial && (
-              <div className="relative pl-6 space-y-1.5 my-1 ml-5">
-                <div className="absolute left-[7px] top-0 bottom-4 w-[1.5px] bg-zinc-300 dark:bg-zinc-700" />
-
-                {/* Planos & Preços */}
-                <div className="relative flex items-center">
-                  <div className="absolute -left-[17px] top-0 h-[19px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-zinc-300 dark:border-zinc-700 rounded-bl-[10px] pointer-events-none" />
-                  <NavLink
-                    to="/plans"
-                    className={({ isActive }) =>
-                      `w-full flex items-center px-4 py-2 rounded-2xl text-[13px] transition-all ${
-                        isActive
-                          ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
-                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-white/60 dark:hover:bg-zinc-800/60 font-medium'
-                      }`
-                    }
-                  >
-                    <span>Planos & Preços</span>
-                  </NavLink>
-                </div>
-
-                {/* Cupons de Desconto */}
-                <div className="relative flex items-center">
-                  <div className="absolute -left-[17px] top-0 h-[19px] w-[14px] border-b-[1.5px] border-l-[1.5px] border-zinc-300 dark:border-zinc-700 rounded-bl-[10px] pointer-events-none" />
-                  <NavLink
-                    to="/coupons"
-                    className={({ isActive }) =>
-                      `w-full flex items-center px-4 py-2 rounded-2xl text-[13px] transition-all ${
-                        isActive
-                          ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
-                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-white/60 dark:hover:bg-zinc-800/60 font-medium'
-                      }`
-                    }
-                  >
-                    <span>Cupons de Desconto</span>
                   </NavLink>
                 </div>
               </div>
@@ -673,6 +625,20 @@ export function Sidebar() {
           </button>
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <>
+      <aside aria-label="Navegação principal" className="hidden md:flex w-[260px] h-screen p-6 lg:p-7 flex-col justify-between shrink-0 select-none bg-zinc-50 dark:bg-zinc-900/60 font-sans border-r border-zinc-200/70 dark:border-zinc-800">
+        {renderNavContent()}
+      </aside>
+
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-[280px] p-6 bg-zinc-50 dark:bg-zinc-900 border-0 flex flex-col justify-between overflow-y-auto">
+          {renderNavContent()}
+        </SheetContent>
+      </Sheet>
 
       <ConfirmDialog
         open={logoutConfirmOpen}
@@ -684,6 +650,6 @@ export function Sidebar() {
         tone="destructive"
         onConfirm={handleLogout}
       />
-    </aside>
+    </>
   );
 }

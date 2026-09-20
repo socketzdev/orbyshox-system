@@ -246,6 +246,12 @@ const nicheStyles: Record<
     border: 'border-emerald-300/60 shadow-[0_2px_8px_rgba(16,185,129,0.12)]',
     icon: <ShoppingCart className="w-2.5 h-2.5 text-emerald-700" />,
   },
+  UNIVERSAL: {
+    bg: 'bg-gradient-to-br from-sky-100 via-blue-50 to-sky-200/80',
+    text: 'text-sky-900',
+    border: 'border-sky-300/60 shadow-[0_2px_8px_rgba(14,165,233,0.12)]',
+    icon: <Store className="w-2.5 h-2.5 text-sky-700" />,
+  },
   DEFAULT: {
     bg: 'bg-gradient-to-br from-indigo-100 via-sky-50 to-indigo-200/80',
     text: 'text-indigo-950',

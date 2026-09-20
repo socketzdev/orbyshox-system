@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Calendar,
@@ -13,6 +14,7 @@ import {
   ArrowUpRight,
   TrendingDown,
   Download,
+  Printer,
 } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { useTenant } from '../context/tenant-context';
@@ -32,12 +34,14 @@ const PERIODS = [
 ];
 
 export const ReportsPage: React.FC = () => {
-  const { slug } = useTenant();
+  const { slug, base } = useTenant();
+  const navigate = useNavigate();
   const [period, setPeriod] = useState('today');
 
   const { data, isLoading } = useQuery({
     queryKey: ['reports-summary', slug, period],
     queryFn: () => apiGet(`/tenant-app/${slug}/reports/summary?period=${period}`),
+    refetchInterval: 30000,
   });
 
   const totalSalesCents = data?.totalSalesCents || 0;
@@ -66,12 +70,22 @@ export const ReportsPage: React.FC = () => {
         </div>
 
         {/* Period Selector */}
-        <div className="flex items-center gap-1.5 bg-zinc-100 p-1 rounded-2xl">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            onClick={() => navigate(`${base}/reports/closing`)}
+            className="h-9 text-xs font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+            title="Gerar e imprimir o fechamento do dia na impressora térmica"
+          >
+            <Printer className="w-3.5 h-3.5 mr-1.5" />
+            Relatório Vendas de Hoje
+          </Button>
+          <div className="flex items-center gap-1.5 bg-zinc-100 p-1 rounded-2xl overflow-x-auto max-w-full scrollbar-none">
           {PERIODS.map((p) => (
             <button
               key={p.id}
               onClick={() => setPeriod(p.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 whitespace-nowrap ${
                 period === p.id
                   ? 'bg-white text-zinc-900 shadow-2xs'
                   : 'text-zinc-600 hover:text-zinc-900'
@@ -80,6 +94,7 @@ export const ReportsPage: React.FC = () => {
               {p.label}
             </button>
           ))}
+          </div>
         </div>
       </div>
 

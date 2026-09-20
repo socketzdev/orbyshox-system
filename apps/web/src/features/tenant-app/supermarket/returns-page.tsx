@@ -43,6 +43,7 @@ export const ReturnsPage: React.FC = () => {
   const { data: returns = [], isLoading: isLoadingReturns } = useQuery({
     queryKey: ['order-returns', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/pos/returns`),
+    refetchInterval: 15000,
   });
 
   // Fetch recent orders to pick from
@@ -58,6 +59,9 @@ export const ReturnsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['order-returns', slug] });
       queryClient.invalidateQueries({ queryKey: ['pos-products', slug] });
       queryClient.invalidateQueries({ queryKey: ['tenant-orders', slug] });
+      queryClient.invalidateQueries({ queryKey: ['day-closing'] });
+      queryClient.invalidateQueries({ queryKey: ['cash-register', slug] });
+      queryClient.invalidateQueries({ queryKey: ['reports-summary'] });
       toast.success('Devolução registrada com sucesso! Itens e saldos atualizados.');
       setModalOpen(false);
       setSelectedOrderId('');
@@ -187,7 +191,7 @@ export const ReturnsPage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[750px] text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50/40 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                 <th className="py-3 px-4">Data</th>

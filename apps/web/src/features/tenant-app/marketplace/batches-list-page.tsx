@@ -55,7 +55,14 @@ const daysUntil = (iso: string | null): number | null => {
 };
 
 export const BatchesListPage: React.FC = () => {
-  const { slug } = useTenant();
+  const { slug, abilities } = useTenant();
+
+  // Permissões resolvidas pelo backend. Nada de adivinhar pelo cargo aqui:
+  // a mesma matriz que bloqueia a rota é a que decide o que aparece.
+  const can = {
+    deleteStockBatch: abilities.canDeleteStockBatch,
+    updateStockBatch: abilities.canUpdateStockBatch,
+  };
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'expiring30' | 'expiring7'>('all');
   const [batchToRemove, setBatchToRemove] = useState<Batch | null>(null);
@@ -69,11 +76,13 @@ export const BatchesListPage: React.FC = () => {
       if (filter === 'all') params.status = 'ACTIVE';
       return apiGet(`/tenant-app/${slug}/batches`, params);
     },
+    refetchInterval: 30000,
   });
 
   const { data: stats } = useQuery<BatchStats>({
     queryKey: ['batches-stats', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/batches/stats`),
+    refetchInterval: 30000,
   });
 
   const update = useMutation({
@@ -230,14 +239,19 @@ export const BatchesListPage: React.FC = () => {
                             Reativar
                           </button>
                         )}
-                        <button
-                          type="button"
-                          aria-label={`Remover lote ${b.lotNumber}`}
-                          onClick={() => setBatchToRemove(b)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Exclusão de lote é irreversível e só o TENANT_ADMIN
+                            pode fazê-la. O botão nem aparece para os demais,
+                            em vez de aparecer e devolver 403 no clique. */}
+                        {can.deleteStockBatch && (
+                          <button
+                            type="button"
+                            aria-label={`Remover lote ${b.lotNumber}`}
+                            onClick={() => setBatchToRemove(b)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </CossTableCell>
                   </CossTableRow>

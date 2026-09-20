@@ -16,9 +16,13 @@ import {
   Upload,
   Loader2,
   UtensilsCrossed,
+  X,
+  Trash2,
+  FolderPlus,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
 import { useTenant } from '../context/tenant-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,15 +39,141 @@ import {
 import { TableRowSkeleton } from '../components/erp-skeleton';
 import { ErpEmptyState } from '../components/erp-empty-state';
 import { CreateFoodProductDialog } from '../components/create-food-product-dialog';
+import { ImageUploadField } from '../components/image-upload-field';
 
 export const ProductListPage: React.FC = () => {
-  const { slug } = useTenant();
+  const { slug, tenant } = useTenant();
   const queryClient = useQueryClient();
+  const isRestaurant =
+    tenant?.niche === 'RESTAURANT' ||
+    (!['RESTAURANT', 'BARBERSHOP', 'SUPERMARKET', 'UNIVERSAL'].includes(String(tenant?.niche || '').toUpperCase()) &&
+      ['JAPANESE', 'BURGER_HOUSE', 'PIZZERIA', 'PASTRY', 'RESTAURANT'].includes(
+        String(tenant?.niche || (tenant as any)?.category || (tenant as any)?.company?.category || '').toUpperCase()
+      )) ||
+    (tenant?.features || []).includes('tables');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [createFoodOpen, setCreateFoodOpen] = useState(false);
+
+  // Category management state
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryToDelete, setCategoryToDelete] = useState<any | null>(null);
+  const [categoryToRename, setCategoryToRename] = useState<any | null>(null);
+  const [renameCategoryName, setRenameCategoryName] = useState('');
+
+  // Product deletion state (single + bulk via checkbox)
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [productToDelete, setProductToDelete] = useState<any | null>(null);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
+  const invalidateProducts = () => {
+    queryClient.invalidateQueries({ queryKey: ['pos-products', slug] });
+    queryClient.invalidateQueries({ queryKey: ['restaurant-menu'] });
+  };
+
+  const deleteProductMutation = useMutation({
+    mutationFn: (prodId: string) => apiDelete(`/tenant-app/${slug}/products/${prodId}`),
+    onSuccess: (res: any) => {
+      invalidateProducts();
+      setProductToDelete(null);
+      if (res?.deactivated) {
+        toast.warning(`"${res.name}" tem vendas registradas e foi desativado (saiu da venda, histórico preservado).`);
+      } else {
+        toast.success(`"${res?.name || 'Produto'}" excluído de vez!`);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Falha ao excluir produto');
+    },
+  });
+
+  const deleteBulkMutation = useMutation({
+    mutationFn: (ids: string[]) => apiDelete(`/tenant-app/${slug}/products`, { data: { ids } }),
+    onSuccess: (res: any) => {
+      invalidateProducts();
+      setSelectedIds([]);
+      setBulkConfirmOpen(false);
+      const parts: string[] = [];
+      if (res?.deleted > 0) parts.push(`${res.deleted} excluído(s)`);
+      if (res?.deactivated > 0) parts.push(`${res.deactivated} desativado(s) por terem vendas`);
+      toast.success(parts.length > 0 ? parts.join(' • ') + '!' : 'Nada para excluir.');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Falha ao excluir produtos');
+    },
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: (newCatData: { name: string }) =>
+      apiPost(`/tenant-app/${slug}/categories`, newCatData),
+    onSuccess: (newCat) => {
+      queryClient.invalidateQueries({ queryKey: ['pos-products', slug] });
+      queryClient.invalidateQueries({ queryKey: ['restaurant-menu'] });
+      setCreateCategoryOpen(false);
+      setNewCategoryName('');
+      toast.success(`Categoria "${newCat?.name || 'Nova'}" criada com sucesso!`);
+      if (newCat?.id) {
+        setSelectedCategory(newCat.id);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Falha ao criar categoria');
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (catId: string) =>
+      apiDelete(`/tenant-app/${slug}/categories/${catId}`),
+    onSuccess: (_, deletedCatId) => {
+      queryClient.invalidateQueries({ queryKey: ['pos-products', slug] });
+      queryClient.invalidateQueries({ queryKey: ['restaurant-menu'] });
+      if (selectedCategory === deletedCatId) {
+        setSelectedCategory(null);
+      }
+      setCategoryToDelete(null);
+      toast.success('Categoria excluída com sucesso!');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Falha ao excluir categoria');
+    },
+  });
+
+  const handleCreateCategorySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) {
+      toast.error('Informe o nome da categoria');
+      return;
+    }
+    createCategoryMutation.mutate({ name: newCategoryName.trim() });
+  };
+
+  const renameCategoryMutation = useMutation({
+    mutationFn: ({ catId, name }: { catId: string; name: string }) =>
+      apiPatch(`/tenant-app/${slug}/categories/${catId}`, { name }),
+    onSuccess: (renamed: any) => {
+      queryClient.invalidateQueries({ queryKey: ['pos-products', slug] });
+      queryClient.invalidateQueries({ queryKey: ['restaurant-menu'] });
+      setCategoryToRename(null);
+      setRenameCategoryName('');
+      toast.success(`Categoria renomeada para "${renamed?.name || 'nova'}"!`);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Falha ao renomear categoria');
+    },
+  });
+
+  const handleRenameCategorySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryToRename?.id) return;
+    if (!renameCategoryName.trim()) {
+      toast.error('Informe o novo nome da categoria');
+      return;
+    }
+    renameCategoryMutation.mutate({ catId: categoryToRename.id, name: renameCategoryName.trim() });
+  };
 
   // Form state
   const [name, setName] = useState('');
@@ -57,6 +187,7 @@ export const ProductListPage: React.FC = () => {
   const [stockQuantity, setStockQuantity] = useState('50');
   const [minStockAlert, setMinStockAlert] = useState('5');
   const [unit, setUnit] = useState('UN');
+  const [imageUrl, setImageUrl] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // AI Vision state
@@ -73,6 +204,7 @@ export const ProductListPage: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['pos-products', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/products`),
+    refetchInterval: 30000,
   });
 
   const categories = data?.categories || [];
@@ -134,6 +266,7 @@ export const ProductListPage: React.FC = () => {
     setStockQuantity('50');
     setMinStockAlert('5');
     setUnit('UN');
+    setImageUrl('');
     setShowAdvanced(false);
     setDetectedItem(null);
     setIsAnalyzingImage(false);
@@ -159,6 +292,7 @@ export const ProductListPage: React.FC = () => {
       setNcm('');
       setSalePrice('');
       setCostPrice('');
+      setImageUrl('');
       toast.success('Produto cadastrado com sucesso!');
     },
     onError: (err: any) => toast.error(err.response?.data?.message || 'Erro ao cadastrar produto'),
@@ -203,6 +337,7 @@ export const ProductListPage: React.FC = () => {
       stockQuantity: effectiveStock,
       minStockAlert: effectiveMinAlert,
       unit: unit || 'UN',
+      imageUrl: imageUrl.trim() || null,
     });
   };
 
@@ -226,7 +361,9 @@ export const ProductListPage: React.FC = () => {
   }, [products, searchTerm, selectedCategory]);
 
   const lowStockCount = products.filter(
-    (p: any) => Number(p.stockQuantity) <= Number(p.minStockAlert)
+    (p: any) =>
+      Number(p.stockQuantity) < 999000 &&
+      Number(p.stockQuantity) <= Number(p.minStockAlert)
   ).length;
 
   return (
@@ -236,11 +373,15 @@ export const ProductListPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-2">
-              <Package className="w-5 h-5 text-zinc-700" />
-              Catálogo & Controle de Estoque
+              {isRestaurant ? (
+                <UtensilsCrossed className="w-5 h-5 text-amber-600" />
+              ) : (
+                <Package className="w-5 h-5 text-zinc-700" />
+              )}
+              {isRestaurant ? 'Cardápio & Catálogo de Pratos' : 'Catálogo & Controle de Estoque'}
             </h1>
             <Badge variant="outline" className="text-[11px] font-semibold bg-zinc-50">
-              {products.length} produtos
+              {products.length} {isRestaurant ? 'pratos/itens' : 'produtos'}
             </Badge>
             {lowStockCount > 0 && (
               <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[11px] font-bold">
@@ -249,28 +390,32 @@ export const ProductListPage: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-zinc-500">
-            Gerencie itens de venda, margem de lucro e limites para disparo de alertas automáticos.
+            {isRestaurant
+              ? 'Gerencie pratos, preços, opções de personalização e itens do cardápio.'
+              : 'Gerencie itens de venda, margem de lucro e limites para disparo de alertas automáticos.'}
           </p>
         </div>
 
         <div className="flex items-center flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => setCreateFoodOpen(true)}
-            className="h-10 px-4 text-xs font-black text-zinc-950 bg-amber-400 hover:bg-amber-500 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <UtensilsCrossed className="w-4 h-4 text-zinc-950" />
-            <span>＋ Nova Comida (Cardápio)</span>
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={handleOpenNewModal}
-            className="h-10 px-4 text-xs font-bold text-white bg-gradient-to-b from-zinc-800 to-zinc-950 hover:from-zinc-700 hover:to-zinc-900 border border-zinc-700/50 rounded-xl shadow-2xs hover:shadow-xs transition-all active:scale-[0.98] flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span>Cadastrar Produto</span>
-          </Button>
+          {isRestaurant ? (
+            <Button
+              size="sm"
+              onClick={() => setCreateFoodOpen(true)}
+              className="h-10 px-4 text-xs font-bold text-white bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 border border-amber-400/50 rounded-xl shadow-2xs hover:shadow-xs transition-all active:scale-[0.98] flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>＋ Nova Comida</span>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleOpenNewModal}
+              className="h-10 px-4 text-xs font-bold text-white bg-gradient-to-b from-zinc-800 to-zinc-950 hover:from-zinc-700 hover:to-zinc-900 border border-zinc-700/50 rounded-xl shadow-2xs hover:shadow-xs transition-all active:scale-[0.98] flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>Cadastrar Produto</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -282,7 +427,7 @@ export const ProductListPage: React.FC = () => {
             <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input
               type="text"
-              placeholder="Pesquisar por nome ou código..."
+              placeholder={isRestaurant ? 'Pesquisar por prato, sabor ou categoria...' : 'Pesquisar por nome ou código...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 h-10 text-xs rounded-xl border-zinc-200 bg-zinc-50 text-zinc-900 placeholder:text-zinc-400 focus:bg-white focus:border-zinc-800 transition"
@@ -291,6 +436,21 @@ export const ProductListPage: React.FC = () => {
 
           {/* Category Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {/* + Criar Categoria (primeiro na esquerda de todas as categorias) */}
+            <button
+              type="button"
+              onClick={() => {
+                setNewCategoryName('');
+                setCreateCategoryOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all border border-dashed border-amber-400/80 bg-amber-50 text-amber-900 hover:bg-amber-100 hover:border-amber-500 shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
+              title="Criar nova categoria"
+            >
+              <Plus className="w-3.5 h-3.5 text-amber-700 stroke-[2.5]" />
+              <span>+ Criar Categoria</span>
+            </button>
+
+            {/* Todas Categorias */}
             <button
               type="button"
               onClick={() => setSelectedCategory(null)}
@@ -302,20 +462,69 @@ export const ProductListPage: React.FC = () => {
             >
               Todas Categorias
             </button>
-            {categories.map((cat: any) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all ${
-                  selectedCategory === cat.id
-                    ? 'bg-zinc-900 text-white shadow-sm'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
+
+            {/* Categorias com botão X na ponta da direita ao passar o mouse */}
+            {categories.map((cat: any) => {
+              const isSelected = selectedCategory === cat.id;
+              return (
+                <div
+                  key={cat.id}
+                  className="relative group shrink-0 inline-flex items-center"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`pl-3 pr-2 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? 'bg-zinc-900 text-white shadow-sm'
+                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70'
+                    }`}
+                  >
+                    <span>{cat.name}</span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      title={`Renomear categoria "${cat.name}"`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCategoryToRename(cat);
+                        setRenameCategoryName(cat.name);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.stopPropagation();
+                          setCategoryToRename(cat);
+                          setRenameCategoryName(cat.name);
+                        }
+                      }}
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded-md flex items-center justify-center cursor-pointer ${
+                        isSelected
+                          ? 'hover:bg-white/20 text-zinc-300 hover:text-white'
+                          : 'hover:bg-zinc-200 text-zinc-400 hover:text-zinc-700'
+                      }`}
+                    >
+                      <Pencil className="w-3 h-3 stroke-[2.5]" />
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      title={`Excluir categoria "${cat.name}"`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCategoryToDelete(cat);
+                      }}
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded-md flex items-center justify-center cursor-pointer ${
+                        isSelected
+                          ? 'hover:bg-white/20 text-zinc-300 hover:text-white'
+                          : 'hover:bg-rose-100 text-zinc-400 hover:text-rose-600'
+                      }`}
+                    >
+                      <X className="w-3 h-3 stroke-[2.5]" />
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -329,38 +538,103 @@ export const ProductListPage: React.FC = () => {
           </table>
         ) : filtered.length === 0 ? (
           <ErpEmptyState
-            icon={Package}
-            title="Nenhum produto cadastrado"
-            description="Cadastre seu primeiro produto para começar a vender e controlar o estoque."
-            actionLabel="Cadastrar Produto"
-            onAction={handleOpenNewModal}
+            icon={isRestaurant ? UtensilsCrossed : Package}
+            title={isRestaurant ? "Nenhuma comida cadastrada" : "Nenhum produto cadastrado"}
+            description={isRestaurant ? "Cadastre seu primeiro prato para montar o cardápio do restaurante." : "Cadastre seu primeiro produto para começar a vender e controlar o estoque."}
+            actionLabel={isRestaurant ? "＋ Nova Comida" : "Cadastrar Produto"}
+            onAction={isRestaurant ? () => setCreateFoodOpen(true) : handleOpenNewModal}
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-red-50 border border-red-200">
+                <span className="text-xs font-bold text-red-800">
+                  {selectedIds.length} selecionado(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBulkConfirmOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 transition min-h-[40px] cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Excluir selecionados
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  className="px-3 py-2 rounded-lg text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 min-h-[40px] cursor-pointer"
+                >
+                  Limpar
+                </button>
+              </div>
+            )}
+            <table className="w-full min-w-[720px] text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-100 text-zinc-400 uppercase text-[10px] tracking-wider font-semibold">
-                  <th className="pb-3 pl-2">Produto / Código</th>
+                  <th className="pb-3 pl-2 w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todos"
+                      checked={filtered.length > 0 && filtered.every((p: any) => selectedIds.includes(p.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(Array.from(new Set([...selectedIds, ...filtered.map((p: any) => p.id)])));
+                        } else {
+                          const visible = new Set(filtered.map((p: any) => p.id));
+                          setSelectedIds(selectedIds.filter((id) => !visible.has(id)));
+                        }
+                      }}
+                      className="w-4 h-4 accent-red-600 cursor-pointer"
+                    />
+                  </th>
+                  <th className="pb-3">{isRestaurant ? 'Prato / Alimento' : 'Produto / Código'}</th>
                   <th className="pb-3">Categoria</th>
                   <th className="pb-3 text-right">Preço Venda</th>
-                  <th className="pb-3 text-right">Preço Custo</th>
-                  <th className="pb-3 text-center">Estoque Atual</th>
+                  <th className="pb-3 text-right">{isRestaurant ? 'Custo Estimado' : 'Preço Custo'}</th>
+                  <th className="pb-3 text-center">{isRestaurant ? 'Preparo / Cozinha' : 'Estoque Atual'}</th>
                   <th className="pb-3 text-center">Status</th>
                   <th className="pb-3 pr-2 text-right">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {filtered.map((item: any) => {
-                  const isLow = Number(item.stockQuantity) <= Number(item.minStockAlert);
+                  const isUnlimited =
+                    Number(item.stockQuantity) >= 999000 ||
+                    item.stockQuantity === null ||
+                    item.stockQuantity === undefined;
+                  const isLow =
+                    !isUnlimited &&
+                    Number(item.stockQuantity) <= Number(item.minStockAlert);
                   const price = ((item.salePriceCents || 0) / 100).toFixed(2);
                   const cost = ((item.costPriceCents || 0) / 100).toFixed(2);
 
                   return (
-                    <tr key={item.id} className="hover:bg-zinc-50/60 transition-colors">
-                      <td className="py-3.5 pl-2 font-medium text-zinc-900">
+                    <tr key={item.id} className={`hover:bg-zinc-50/60 transition-colors ${selectedIds.includes(item.id) ? 'bg-red-50/40' : ''} ${item.isActive === false ? 'opacity-60' : ''}`}>
+                      <td className="py-3.5 pl-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Selecionar ${item.name}`}
+                          checked={selectedIds.includes(item.id)}
+                          onChange={(e) => {
+                            setSelectedIds(
+                              e.target.checked
+                                ? [...selectedIds, item.id]
+                                : selectedIds.filter((id) => id !== item.id),
+                            );
+                          }}
+                          className="w-4 h-4 accent-red-600 cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-3.5 font-medium text-zinc-900">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-600 shrink-0">
-                            <Package className="w-4 h-4" />
+                          <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-600 shrink-0 overflow-hidden border border-zinc-200/60">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            ) : isRestaurant ? (
+                              <UtensilsCrossed className="w-4 h-4 text-amber-600" />
+                            ) : (
+                              <Package className="w-4 h-4" />
+                            )}
                           </div>
                           <div>
                             <span className="font-semibold block">{item.name}</span>
@@ -404,13 +678,28 @@ export const ProductListPage: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 text-center font-mono font-semibold">
-                        <span className={isLow ? 'text-rose-600 font-bold' : 'text-zinc-800'}>
-                          {item.stockQuantity} {item.unit || 'UN'}
-                        </span>
+                        {isUnlimited ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-lg">
+                            Feito na Hora
+                          </span>
+                        ) : (
+                          <span className={isLow ? 'text-rose-600 font-bold' : 'text-zinc-800'}>
+                            {item.stockQuantity} {item.unit || 'UN'}
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3.5 text-center">
-                        {isLow ? (
+                        {item.isActive === false ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 bg-zinc-200/70 px-2 py-0.5 rounded-full border border-zinc-300">
+                            <X className="w-3 h-3" />
+                            Inativo
+                          </span>
+                        ) : isUnlimited ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">
+                            Sob Demanda
+                          </span>
+                        ) : isLow ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
                             <AlertTriangle className="w-3 h-3" />
                             Estoque Baixo
@@ -424,17 +713,27 @@ export const ProductListPage: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 pr-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAdjustProd(item);
-                            setAdjustQty(String(item.stockQuantity));
-                            setAdjustModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
-                        >
-                          Ajustar
-                        </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdjustProd(item);
+                              setAdjustQty(String(item.stockQuantity));
+                              setAdjustModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
+                          >
+                            Ajustar
+                          </button>
+                          <button
+                            type="button"
+                            title={`Excluir "${item.name}"`}
+                            onClick={() => setProductToDelete(item)}
+                            className="p-2 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer min-w-[40px] min-h-[40px] inline-flex items-center justify-center"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -447,7 +746,7 @@ export const ProductListPage: React.FC = () => {
 
       {/* Modal: Cadastro Rápido & Inteligente de Produto */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white border border-zinc-200/90 p-6 sm:p-7 rounded-3xl font-sans shadow-xl">
+        <DialogContent className="sm:max-w-md bg-white border border-zinc-200/90 p-6 sm:p-7 rounded-3xl font-sans shadow-xl max-h-[92dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-black text-zinc-900 flex items-center gap-2">
               <Package className="w-4 h-4 text-zinc-700" />
@@ -633,6 +932,16 @@ export const ProductListPage: React.FC = () => {
               </div>
             )}
 
+            {/* Foto do Produto */}
+            <div>
+              <ImageUploadField
+                value={imageUrl}
+                onChange={setImageUrl}
+                label="Foto do Produto / Item"
+                helperText="Formatos aceitos: JPG, PNG, WEBP. A imagem aparecerá no PDV e catálogo."
+              />
+            </div>
+
             {/* 5. Sanfona Expansível: Detalhes Adicionais (Apenas se quiser) */}
             <div className="pt-1">
               <button
@@ -741,19 +1050,19 @@ export const ProductListPage: React.FC = () => {
               )}
             </div>
 
-            <DialogFooter className="mt-4 flex items-center justify-end gap-2 pt-3 border-t border-zinc-100">
+            <DialogFooter className="mt-4 flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 sticky bottom-0 bg-white/95 backdrop-blur pb-1">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setModalOpen(false)}
-                className="h-10 px-4 text-xs font-semibold rounded-xl"
+                className="h-11 px-5 text-xs font-semibold rounded-xl"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={createMutation.isPending}
-                className="h-10 px-6 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition cursor-pointer shadow-sm"
+                className="h-11 px-6 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition cursor-pointer shadow-sm"
               >
                 {createMutation.isPending ? 'Salvando...' : 'Salvar Produto'}
               </Button>
@@ -816,6 +1125,295 @@ export const ProductListPage: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ['restaurant-menu'] });
         }}
       />
+
+      {/* Modal: Nova Categoria */}
+      <Dialog open={createCategoryOpen} onOpenChange={setCreateCategoryOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-2">
+              <FolderPlus className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-base font-bold text-zinc-900">
+              Nova Categoria
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500">
+              Crie uma nova categoria para organizar os itens e pratos do seu cardápio.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateCategorySubmit} className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-semibold text-zinc-700 block mb-1.5">
+                Nome da Categoria *
+              </label>
+              <Input
+                type="text"
+                autoFocus
+                placeholder="Ex: Sobremesas da Casa, Bebidas & Sucos, Pratos Executivos..."
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateCategoryOpen(false)}
+                className="h-9 text-xs rounded-xl"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={createCategoryMutation.isPending || !newCategoryName.trim()}
+                className="h-9 text-xs rounded-xl bg-zinc-900 text-white hover:bg-zinc-800"
+              >
+                {createCategoryMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Criar Categoria'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Renomear Categoria */}
+      <Dialog
+        open={!!categoryToRename}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCategoryToRename(null);
+            setRenameCategoryName('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-xl bg-zinc-100 text-zinc-700 flex items-center justify-center mb-2">
+              <Pencil className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-base font-bold text-zinc-900">
+              Renomear Categoria
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500">
+              O novo nome aparece na hora nos atalhos do garçom ao lançar itens.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleRenameCategorySubmit} className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-semibold text-zinc-700 block mb-1.5">
+                Novo nome *
+              </label>
+              <Input
+                type="text"
+                autoFocus
+                placeholder="Ex: Bebidas, Sobremesas, Batatas..."
+                value={renameCategoryName}
+                onChange={(e) => setRenameCategoryName(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCategoryToRename(null);
+                  setRenameCategoryName('');
+                }}
+                className="h-9 text-xs rounded-xl"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={renameCategoryMutation.isPending || !renameCategoryName.trim()}
+                className="h-9 text-xs rounded-xl bg-zinc-900 text-white hover:bg-zinc-800"
+              >
+                {renameCategoryMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Renomear Categoria'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Confirmar Exclusão de Categoria */}
+      <Dialog
+        open={!!categoryToDelete}
+        onOpenChange={(open) => !open && setCategoryToDelete(null)}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-2">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-base font-bold text-zinc-900">
+              Excluir Categoria
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-600 leading-relaxed">
+              Tem certeza que deseja excluir a categoria{' '}
+              <strong className="text-zinc-900 font-bold">
+                "{categoryToDelete?.name}"
+              </strong>
+              ?
+              <br />
+              <span className="text-zinc-400 block mt-1">
+                Os pratos vinculados a ela não serão apagados, apenas ficarão sem categoria.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteCategoryMutation.isPending}
+              onClick={() => setCategoryToDelete(null)}
+              className="h-9 text-xs rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={deleteCategoryMutation.isPending}
+              onClick={() => {
+                if (categoryToDelete?.id) {
+                  deleteCategoryMutation.mutate(categoryToDelete.id);
+                }
+              }}
+              className="h-9 text-xs rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            >
+              {deleteCategoryMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                'Sim, Excluir Categoria'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Confirmar Exclusão de Produto (unitário) */}
+      <Dialog
+        open={!!productToDelete}
+        onOpenChange={(open) => !open && setProductToDelete(null)}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-2">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-base font-bold text-zinc-900">
+              Excluir Produto
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-600 leading-relaxed">
+              Tem certeza que deseja excluir{' '}
+              <strong className="text-zinc-900 font-bold">
+                "{productToDelete?.name}"
+              </strong>
+              ?
+              <br />
+              <span className="text-zinc-400 block mt-1">
+                Sem vendas: apaga de vez. Com vendas: só desativa (sai da venda, mas o histórico é preservado).
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteProductMutation.isPending}
+              onClick={() => setProductToDelete(null)}
+              className="h-9 text-xs rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={deleteProductMutation.isPending}
+              onClick={() => {
+                if (productToDelete?.id) {
+                  deleteProductMutation.mutate(productToDelete.id);
+                }
+              }}
+              className="h-9 text-xs rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            >
+              {deleteProductMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                'Sim, Excluir'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Confirmar Exclusão em Lote */}
+      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-2">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-base font-bold text-zinc-900">
+              Excluir {selectedIds.length} produto(s)
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-600 leading-relaxed">
+              Tem certeza? Itens sem vendas são apagados de vez; itens com vendas são apenas desativados para preservar o histórico.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteBulkMutation.isPending}
+              onClick={() => setBulkConfirmOpen(false)}
+              className="h-9 text-xs rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={deleteBulkMutation.isPending}
+              onClick={() => deleteBulkMutation.mutate(selectedIds)}
+              className="h-9 text-xs rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            >
+              {deleteBulkMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                `Sim, Excluir ${selectedIds.length}`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

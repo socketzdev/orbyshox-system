@@ -32,7 +32,7 @@ const DEFAULT_SITE_THEME: SiteTheme = {
 const NICHE_OPTIONS: Array<{ value: ClientSiteNiche; label: string; description: string; mark: string }> = [
   { value: 'RESTAURANT', label: 'Restaurante', description: 'Cardápio, reservas e experiência gastronômica.', mark: 'R' },
   { value: 'BARBERSHOP', label: 'Barbearia', description: 'Serviços, profissionais e agenda.', mark: 'B' },
-  { value: 'SUPERMARKET', label: 'Mercado', description: 'Ofertas, categorias e conveniência.', mark: 'M' },
+  { value: 'UNIVERSAL', label: 'Universal', description: 'Ofertas, categorias e qualquer negócio.', mark: 'U' },
 ];
 
 const STEPS = [

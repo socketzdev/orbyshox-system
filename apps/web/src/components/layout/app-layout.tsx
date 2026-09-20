@@ -3,6 +3,7 @@ import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { CommandPalette } from './command-palette';
 import { OnboardingTour } from '../onboarding/onboarding-tour';
+import { AiCopilotDrawer } from '@/features/ai/components/ai-copilot-drawer';
 
 export function AppLayout() {
   return (
@@ -11,7 +12,7 @@ export function AppLayout() {
       <Sidebar />
 
       {/* ─── Conteúdo Tela Cheia (Edge to Edge) ─── */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto px-6 sm:px-8 lg:px-10 py-6">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto px-4 sm:px-8 lg:px-10 py-4 sm:py-6">
         <Header />
         <main className="flex-1 mt-2">
           <Outlet />
@@ -20,6 +21,11 @@ export function AppLayout() {
 
       <CommandPalette />
       <OnboardingTour />
+      <AiCopilotDrawer
+        tenantName="Plataforma SaaS"
+        scope="GLOBAL"
+        userName="SuperAdmin"
+      />
     </div>
   );
 }

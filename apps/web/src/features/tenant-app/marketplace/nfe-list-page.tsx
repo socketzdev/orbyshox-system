@@ -85,12 +85,14 @@ export const NfeListPage: React.FC = () => {
   const { data: nfes = [], isLoading } = useQuery<NfeEntry[]>({
     queryKey: ['nfe', slug],
     queryFn: () => apiGet(`/tenant-app/${slug}/nfe`),
+    refetchInterval: 30000,
   });
 
   const selectedNfe = useQuery<NfeEntry & { items: NfeItem[] }>({
     queryKey: ['nfe', slug, selectedNfeId],
     queryFn: () => apiGet(`/tenant-app/${slug}/nfe/${selectedNfeId}`),
     enabled: !!selectedNfeId,
+    refetchInterval: 15000,
   });
 
   const finalize = useMutation({

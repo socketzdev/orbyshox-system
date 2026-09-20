@@ -2,6 +2,7 @@ import axios from 'axios';
 import {
   getAdminToken,
   getTenantToken,
+  getViewingSlug,
   saveAdminToken,
   saveTenantToken,
 } from './auth';
@@ -25,11 +26,14 @@ export const api = axios.create({
 /** Extrai o slug do tenant a partir da URL (`/tenant-app/<slug>/...`). */
 function tenantSlugFromUrl(url?: string): string | undefined {
   const match = url?.match(/\/tenant-app\/([^/]+)/);
-  return match ? match[1] : undefined;
+  if (!match) return undefined;
+  // `auth` é o segmento das rotas universais (/tenant-app/auth/me), não um slug.
+  if (match[1] === 'auth') return undefined;
+  return match[1];
 }
 
 api.interceptors.request.use((config) => {
-  const isTenantReq = config.url?.includes('/tenant-app') || config.url?.includes('/restaurant');
+  const isTenantReq = config.url?.includes('/tenant-app') || config.url?.includes('/restaurant') || config.url?.includes('/tasks');
   let token: string | null = null;
 
   if (isTenantReq) {
@@ -40,6 +44,13 @@ api.interceptors.request.use((config) => {
 
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Suporte do Super Admin: avisa o backend qual empresa está visualizada
+  // para as rotas que isolam pela empresa do token (ex.: /restaurant/*).
+  // Sem o papel de Super Admin o backend ignora o cabeçalho.
+  if (isTenantReq) {
+    const viewing = getViewingSlug();
+    if (viewing) config.headers['X-Viewing-Slug'] = viewing;
   }
   return config;
 });
@@ -53,25 +64,68 @@ api.interceptors.request.use((config) => {
  */
 let refreshInFlight: Promise<boolean> | null = null;
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * POST com retentativa SÓ em falha de rede (sem resposta: VPN caiu, timeout).
+ * Erro com resposta (401/403/429/500) NÃO retenta: 401 no refresh significa
+ * credencial inválida e insistir só piora (throttle, revogação).
+ */
+async function postWithNetworkRetry(url: string, data?: any, attempts = 3): Promise<any> {
+  let lastError: any = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await api.post(url, data);
+    } catch (err: any) {
+      lastError = err;
+      if (err?.response) throw err;
+      if (i < attempts - 1) await sleep(1200 * (i + 1));
+    }
+  }
+  throw lastError;
+}
+
 async function refreshTokens(slug?: string): Promise<boolean> {
-  try {
-    if (slug) {
-      const res = await api.post(`/tenant-app/${slug}/refresh`, {});
+  // Salva nos DOIS slots: o cabeçalho usa `getTenantToken() || getAdminToken()`
+  // (ou o inverso), então deixar um slot velho gera 401 eterno + rotação sem
+  // fim a cada requisição — que esbarra no throttle e desloga.
+  const persist = (token: string) => {
+    if (slug) saveTenantToken(slug, token);
+    saveTenantToken(token);
+    saveAdminToken(token);
+  };
+
+  // 1. Se slug específico estiver disponível, tenta refresh do slug
+  if (slug) {
+    try {
+      const res = await postWithNetworkRetry(`/tenant-app/${slug}/refresh`, {});
       if (res.data?.accessToken) {
-        saveTenantToken(slug, res.data.accessToken);
+        persist(res.data.accessToken);
         return true;
       }
-      return false;
-    }
-    const res = await api.post('/auth/refresh', {});
+    } catch {}
+  }
+
+  // 2. Tenta refresh universal de tenant (/app, /restaurant, etc.)
+  try {
+    const res = await postWithNetworkRetry('/tenant-app/auth/refresh', {});
     if (res.data?.accessToken) {
-      saveAdminToken(res.data.accessToken);
+      persist(res.data.accessToken);
       return true;
     }
-    return false;
-  } catch {
-    return false;
-  }
+  } catch {}
+
+  // 3. Fallback para superadmin
+  try {
+    const res = await postWithNetworkRetry('/auth/refresh', {});
+    if (res.data?.accessToken) {
+      saveAdminToken(res.data.accessToken);
+      saveTenantToken(res.data.accessToken);
+      return true;
+    }
+  } catch {}
+
+  return false;
 }
 
 function sharedRefresh(slug?: string): Promise<boolean> {
@@ -83,22 +137,32 @@ function sharedRefresh(slug?: string): Promise<boolean> {
   return refreshInFlight;
 }
 
-function redirectToLogin(slug?: string) {
-  if (pathIsAdminLogin()) return;
-  if (slug) {
-    window.location.href = `/${slug}/login`;
-    return;
-  }
-  clearAdminSessionSync();
-  window.location.href = '/login';
-}
-
 function currentPathname(): string {
   return typeof window !== 'undefined' ? window.location.pathname : '';
 }
 
+function pathIsLogin(): boolean {
+  const p = currentPathname();
+  return p === '/login' || p === '/app/login' || p.endsWith('/login');
+}
+
 function pathIsAdminLogin(): boolean {
   return currentPathname() === '/login';
+}
+
+function redirectToLogin(slug?: string) {
+  if (pathIsLogin()) return;
+  if (slug) {
+    window.location.href = `/${slug}/login`;
+    return;
+  }
+  const pathname = currentPathname();
+  if (pathname.startsWith('/app')) {
+    window.location.href = '/app/login';
+    return;
+  }
+  clearAdminSessionSync();
+  window.location.href = '/login';
 }
 
 /** Limpeza síncrona do estado do admin — o import dinâmico é desnecessário aqui. */
@@ -135,19 +199,26 @@ api.interceptors.response.use(
       if (refreshed) {
         // Repete a requisição original uma única vez, já com o token novo.
         original.__isRetry = true;
-        const newToken = slug ? getTenantToken(slug) : getAdminToken();
+        const newToken = slug
+          ? (getTenantToken(slug) || getTenantToken())
+          : (getTenantToken() || getAdminToken());
         if (newToken) original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       }
     }
 
-    const parts = currentPathname().split('/').filter(Boolean);
-    const isTenantRoute = parts.length >= 2 && ['app', 'login', 'agendar'].includes(parts[1]);
+    const pathname = currentPathname();
+    const parts = pathname.split('/').filter(Boolean);
+    const isLoginPage = pathIsLogin();
 
-    if (isTenantRoute && parts[1] === 'app') {
-      window.location.href = `/${parts[0]}/login`;
-    } else if (!pathIsAdminLogin() && !isTenantRoute) {
-      redirectToLogin();
+    if (!isLoginPage) {
+      if (pathname.startsWith('/app')) {
+        window.location.href = '/app/login';
+      } else if (parts.length >= 2 && ['app', 'agendar'].includes(parts[1])) {
+        window.location.href = `/${parts[0]}/login`;
+      } else if (!pathIsAdminLogin()) {
+        redirectToLogin();
+      }
     }
     return Promise.reject(error);
   },
@@ -173,7 +244,7 @@ export async function apiPut<T = any>(url: string, data?: any): Promise<T> {
   return res.data;
 }
 
-export async function apiDelete<T = any>(url: string): Promise<T> {
-  const res = await api.delete<T>(url);
+export async function apiDelete<T = any>(url: string, config?: { data?: any; params?: any }): Promise<T> {
+  const res = await api.delete<T>(url, config);
   return res.data;
 }

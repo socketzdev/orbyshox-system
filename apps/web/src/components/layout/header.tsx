@@ -4,8 +4,9 @@ import { NotificationCenter } from './notification-center';
 import { useSearch } from '@/providers/search-provider';
 import { Avatar, AvatarFallback, AvatarImage, AvatarIndicator } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LogOut, User, Search, ShieldCheck, ChevronRight, Terminal } from 'lucide-react';
+import { LogOut, User, Search, ShieldCheck, ChevronRight, Terminal, Menu } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { useSidebar } from '@/providers/sidebar-provider';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,8 +23,6 @@ const SHORTCUT_LABEL = IS_MAC ? '⌘K' : 'Ctrl K';
 
 const ROUTE_NAMES: Record<string, { parent?: string; title: string }> = {  '/dashboard': { title: 'Dashboard' },
   '/tenants': { title: 'Empresas' },
-  '/plans': { parent: 'Comercial', title: 'Planos & Assinaturas' },
-  '/coupons': { parent: 'Comercial', title: 'Cupons de Desconto' },
   '/billing': { parent: 'Financeiro', title: 'Visão Geral Financeira' },
   '/billing/invoices': { parent: 'Financeiro', title: 'Faturas & Cobranças' },
   '/billing/delinquency': { parent: 'Financeiro', title: 'Controle de Inadimplência' },
@@ -42,15 +41,14 @@ const ROUTE_NAMES: Record<string, { parent?: string; title: string }> = {  '/das
 
 export function Header() {
   const { user, logout } = useAuth();
+  const { toggleMobile } = useSidebar();
   const location = useLocation();
   const { openSearch } = useSearch();
 
   const currentRoute =
     ROUTE_NAMES[location.pathname] ||
-    (location.pathname.startsWith('/tenants/') ? { title: 'Empresas' } :
-     location.pathname.startsWith('/plans/') ? { parent: 'Comercial', title: 'Planos & Assinaturas' } :
-     location.pathname.startsWith('/coupons/') ? { parent: 'Comercial', title: 'Cupons de Desconto' } :
-     location.pathname.startsWith('/tickets/') ? { parent: 'Operações', title: 'Central de Chamados' } :
+     (location.pathname.startsWith('/tenants/') ? { title: 'Empresas' } :
+      location.pathname.startsWith('/tickets/') ? { parent: 'Operações', title: 'Central de Chamados' } :
      location.pathname.startsWith('/knowledge/') ? { parent: 'Operações', title: 'Base de Conhecimento' } :
      location.pathname.startsWith('/staff/') ? { parent: 'Operações', title: 'Equipe Interna' } :
      {
@@ -58,9 +56,18 @@ export function Header() {
      });
 
   return (
-    <header className="h-16 flex items-center justify-between pb-3 w-full select-none">
-      <div className="flex items-center gap-3 min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] truncate font-sans">
+    <header className="h-14 sm:h-16 flex items-center justify-between pb-2 sm:pb-3 w-full select-none">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleMobile}
+          className="md:hidden p-1.5 h-9 w-9 text-zinc-700 hover:bg-white rounded-xl shrink-0"
+          aria-label="Abrir menu"
+        >
+          <Menu className="w-5 h-5" />
+        </Button>
+        <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-[#111827] truncate font-sans">
           {currentRoute.title}
         </h1>
       </div>
