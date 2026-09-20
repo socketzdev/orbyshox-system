@@ -27,29 +27,36 @@ model User {
   is2faEnabled    Boolean   @default(false)
   twoFactorSecret String?
   position        String?
+  // Acúmulos de função em JSON (ex.: `["CLEANING"]`): somam permissões sem
+  // trocar o cargo principal. Só via checkbox controlado na tela de equipe —
+  // nunca texto livre, para a regra de segurança não depender de digitação.
+  tags            String    @default("[]")
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  companyId       String?
-  roleId          String?
+  companyId String?
+  roleId    String?
 
-  tenant           Tenant?          @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  company          Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  roleModel        Role?            @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  refreshTokens    RefreshToken[]
-  recoveryCodes    RecoveryCode[]
-  auditLogs        AuditLog[]       @relation("AuditAuthor")
-  tenantNotes      TenantNote[]
-  tenantAccessLogs TenantAccessLog[]
-  assignedTickets  Ticket[]         @relation("TicketAssignee")
-  createdTickets   Ticket[]         @relation("TicketCreator")
-  ticketMessages   TicketMessage[]
+  tenant            Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  company           Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleModel         Role?              @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  refreshTokens     RefreshToken[]
+  recoveryCodes     RecoveryCode[]
+  auditLogs         AuditLog[]         @relation("AuditAuthor")
+  tenantNotes       TenantNote[]
+  tenantAccessLogs  TenantAccessLog[]
+  assignedTickets   Ticket[]           @relation("TicketAssignee")
+  createdTickets    Ticket[]           @relation("TicketCreator")
+  ticketMessages    TicketMessage[]
   knowledgeArticles KnowledgeArticle[]
-  appointments     Appointment[]    @relation("StaffAppointments")
-  cashRegisters    CashRegister[]   @relation("OpenedCashRegisters")
-  settingsUpdated  SystemSetting[]  @relation("SettingUpdater")
-  barberProfile    BarberProfile?  @relation("UserBarberProfile")
+  appointments      Appointment[]      @relation("StaffAppointments")
+  cashRegisters     CashRegister[]     @relation("OpenedCashRegisters")
+  settingsUpdated   SystemSetting[]    @relation("SettingUpdater")
+  barberProfile     BarberProfile?     @relation("UserBarberProfile")
+  assignedTasks     Task[]             @relation("TaskAssignee")
+  createdTasks      Task[]             @relation("TaskCreator")
+  completedTasks    Task[]             @relation("TaskCompletedBy")
 
   @@index([tenantId])
   @@index([companyId])
@@ -88,52 +95,70 @@ model RecoveryCode {
 // ─── Tenants (Client Companies) ──────────────────────────────────────────────
 
 model Tenant {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   companyName      String
   tradeName        String?
-  slug             String   @unique
-  cnpj             String?  @unique
-  niche            String   @default("BARBERSHOP")
+  slug             String    @unique
+  cnpj             String?   @unique
+  niche            String    @default("BARBERSHOP")
   email            String
   phone            String?
   address          String?
-  status           String   @default("TRIAL")
-  stripeCustomerId String?  @unique
+  status           String    @default("TRIAL")
+  stripeCustomerId String?   @unique
   trialEndsAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  users                  User[]
-  subscriptions          Subscription[]
-  invoices               Invoice[]
-  tickets                Ticket[]
-  notes                  TenantNote[]
-  accessLogs             TenantAccessLog[]
-  couponUsages           CouponUsage[]
-  site                   TenantSite?
-  productCategories      ProductCategory[]
-  products               Product[]
-  customers              Customer[]
-  orders                 Order[]
-  appointments           Appointment[]
-  cashRegisters          CashRegister[]
-  automationRules        AutomationRule[]
+  users                   User[]
+  subscriptions           Subscription[]
+  invoices                Invoice[]
+  tickets                 Ticket[]
+  notes                   TenantNote[]
+  accessLogs              TenantAccessLog[]
+  couponUsages            CouponUsage[]
+  site                    TenantSite?
+  productCategories       ProductCategory[]
+  products                Product[]
+  customers               Customer[]
+  orders                  Order[]
+  appointments            Appointment[]
+  cashRegisters           CashRegister[]
+  automationRules         AutomationRule[]
   automationNotifications AutomationNotification[]
-  suppliers              Supplier[]
-  nfeEntries             NfeEntry[]
-  purchaseOrders         PurchaseOrder[]
-  offlineQueue           OfflineSyncQueue[]
-  stockBatches           StockBatch[]
-  stockLosses            StockLoss[]
-  stockMovements         StockMovement[]
-  inventoryAudits        InventoryAudit[]
-  billsPayable           BillPayable[]
-  billsReceivable        BillReceivable[]
-  orderReturns           OrderReturn[]
-  storeSetting           StoreSetting?
-  cashierTerminals       CashierTerminal[]
-  cashMovements          CashMovement[]
-  purchaseNotes          PurchaseNote[]
+  suppliers               Supplier[]
+  nfeEntries              NfeEntry[]
+  purchaseOrders          PurchaseOrder[]
+  offlineQueue            OfflineSyncQueue[]
+  stockBatches            StockBatch[]
+  stockLosses             StockLoss[]
+  stockMovements          StockMovement[]
+  inventoryAudits         InventoryAudit[]
+  billsPayable            BillPayable[]
+  billsReceivable         BillReceivable[]
+  receivablePayments      ReceivablePayment[]
+  orderReturns            OrderReturn[]
+  cashClosings            CashClosing[]
+  storeSetting            StoreSetting?
+  cashierTerminals        CashierTerminal[]
+  cashMovements           CashMovement[]
+  purchaseNotes           PurchaseNote[]
+  tasks                   Task[]
+  aiConversations         AiConversation[]
+  services                Service[]
+  calendarEvents          CalendarEvent[]
+  gymStudents             GymStudent[]
+  gymEnrollments          GymEnrollment[]
+  gymCheckIns             GymCheckIn[]
+  gymWorkouts             GymWorkout[]
+  gymWorkoutItems         GymWorkoutItem[]
+  gymExercises            GymExercise[]
+  gymAssessments          GymAssessment[]
+  gymClasses              GymClass[]
+  gymClassBookings        GymClassBooking[]
+  serviceEquipment        ServiceEquipment[]
+  serviceOrders           ServiceOrder[]
+  serviceQuotes           ServiceQuote[]
 
   @@index([niche])
   @@index([status])
@@ -236,9 +261,9 @@ model Subscription {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  plan       Plan      @relation(fields: [planId], references: [id])
-  invoices   Invoice[]
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  invoices Invoice[]
 
   @@index([tenantId])
   @@index([status])
@@ -317,28 +342,28 @@ model StripeEvent {
 // ─── Support & Tickets ──────────────────────────────────────────────────────
 
 model Ticket {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
   tenantId              String
   createdById           String
   assignedToId          String?
   subject               String
-  category              String   @default("USAGE_QUESTION")
-  priority              String   @default("MEDIUM")
-  status                String   @default("OPEN")
+  category              String    @default("USAGE_QUESTION")
+  priority              String    @default("MEDIUM")
+  status                String    @default("OPEN")
   slaDeadline           DateTime?
   firstResponseAt       DateTime?
   closedAt              DateTime?
   lastCustomerMessageAt DateTime?
-  slaState              String   @default("ON_TRACK")
+  slaState              String    @default("ON_TRACK")
   slaWarnedAt           DateTime?
   slaBreachedAt         DateTime?
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
   resolvedAt            DateTime?
-  updatedAt             DateTime @updatedAt
+  updatedAt             DateTime  @updatedAt
 
-  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdBy     User                 @relation("TicketCreator", fields: [createdById], references: [id])
-  assignedTo    User?                @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy     User                  @relation("TicketCreator", fields: [createdById], references: [id])
+  assignedTo    User?                 @relation("TicketAssignee", fields: [assignedToId], references: [id])
   messages      TicketMessage[]
   statusHistory TicketStatusHistory[]
 
@@ -389,7 +414,7 @@ model KnowledgeArticle {
   category    String
   authorId    String
   isPublished Boolean  @default(false)
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   author User @relation(fields: [authorId], references: [id])
@@ -496,21 +521,22 @@ model Product {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  tenant         Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  company        Company?             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  category       ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  modifierGroups ProductModifierGroup[]
-  orderItems     OrderItem[]
-  recipeItems    ProductIngredient[]  @relation("RecipeProduct")
-  usedInRecipes  ProductIngredient[]  @relation("IngredientProduct")
-  batches        StockBatch[]
-  nfeItems       NfeEntryItem[]
-  purchaseItems  PurchaseOrderItem[]
-  suppliers      ProductSupplier[]
-  stockLosses    StockLoss[]
-  stockMovements StockMovement[]
-  auditItems     InventoryAuditItem[]
-  barcodes       ProductBarcode[]
+  tenant            Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company           Company?               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category          ProductCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  modifierGroups    ProductModifierGroup[]
+  orderItems        OrderItem[]
+  recipeItems       ProductIngredient[]    @relation("RecipeProduct")
+  usedInRecipes     ProductIngredient[]    @relation("IngredientProduct")
+  batches           StockBatch[]
+  nfeItems          NfeEntryItem[]
+  purchaseItems     PurchaseOrderItem[]
+  suppliers         ProductSupplier[]
+  stockLosses       StockLoss[]
+  stockMovements    StockMovement[]
+  auditItems        InventoryAuditItem[]
+  barcodes          ProductBarcode[]
+  serviceOrderItems ServiceOrderItem[]
 
   @@index([tenantId])
   @@index([companyId])
@@ -531,16 +557,16 @@ model ProductIngredient {
 }
 
 model Customer {
-  id          String    @id @default(uuid())
-  tenantId    String
-  name        String
-  phone       String?
-  email       String?
-  document    String?
-  birthDate   DateTime?
-  totalSpent  Int       @default(0)
-  orderCount  Int       @default(0)
-  lastOrderAt DateTime?
+  id               String    @id @default(uuid())
+  tenantId         String
+  name             String
+  phone            String?
+  email            String?
+  document         String?
+  birthDate        DateTime?
+  totalSpent       Int       @default(0)
+  orderCount       Int       @default(0)
+  lastOrderAt      DateTime?
   notes            String?
   creditLimitCents Int       @default(0)
   currentDebtCents Int       @default(0)
@@ -548,11 +574,14 @@ model Customer {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  orders          Order[]
-  appointments    Appointment[]
-  billsReceivable BillReceivable[]
-  orderReturns    OrderReturn[]
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders           Order[]
+  appointments     Appointment[]
+  billsReceivable  BillReceivable[]
+  orderReturns     OrderReturn[]
+  serviceEquipment ServiceEquipment[]
+  serviceOrders    ServiceOrder[]
+  serviceQuotes    ServiceQuote[]
 
   @@index([tenantId])
   @@index([tenantId, phone])
@@ -575,6 +604,15 @@ model Order {
   notes          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  // Nome do garçom responsável (desnormalizado): o KDS mostra "buscar: X" e o
+  // celular do garçom toca/vibra quando o pedido dele fica pronto. String livre
+  // para não exigir vínculo com User (QR/tablet lançam sem login).
+  waiterName     String?
+  // Id do usuário que lançou/assumiu. O vínculo por ID é o que decide DE VERDADE
+  // para quem apitar (nome pode repetir ou divergir do login). Sem FK de
+  // propósito: QR/tablet não têm usuário e a exclusão de usuário nunca pode
+  // travar ou apagar pedido.
+  waiterId       String?
 
   tenant          Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   company         Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -585,6 +623,13 @@ model Order {
   returns         OrderReturn[]
   billsReceivable BillReceivable[]
 
+  // Numeração sequencial por tenant: sem esta constraint, duas gravações
+  // concorrentes que leem o mesmo `MAX(orderNumber)` geravam números repetidos
+  // em silêncio (o banco aceitava). Com ela, a segunda falha com P2002 e o
+  // serviço regenera o número — ver `withOrderNumberRetry`.
+  // `tenantId` é anulável (pedidos de mesa/empresa); nesses casos o índice
+  // não restringe, porque NULLs são distintos entre si.
+  @@unique([tenantId, orderNumber])
   @@index([tenantId])
   @@index([companyId])
   @@index([tableId])
@@ -593,7 +638,7 @@ model Order {
 }
 
 model OrderItem {
-  id             String @id @default(uuid())
+  id             String  @id @default(uuid())
   orderId        String
   productId      String
   quantity       Float
@@ -653,23 +698,43 @@ model CashRegister {
 }
 
 model BarberProfile {
-  id                    String   @id @default(uuid())
-  userId                String   @unique
-  nickname              String?
-  specialty             String?
-  avatarColor           String   @default("#10b981")
-  serviceCommissionPct  Int      @default(50)
-  productCommissionPct  Int      @default(15)
-  commissionOnFiado     String   @default("UPON_PAYMENT")
-  monthlyGoalCents      Int      @default(0)
-  workingHoursLabel     String?
-  status                String   @default("ACTIVE")
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  nickname             String?
+  specialty            String?
+  avatarColor          String   @default("#10b981")
+  serviceCommissionPct Int      @default(50)
+  productCommissionPct Int      @default(15)
+  commissionOnFiado    String   @default("UPON_PAYMENT")
+  monthlyGoalCents     Int      @default(0)
+  workingHoursLabel    String?
+  status               String   @default("ACTIVE")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   user User @relation("UserBarberProfile", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
+}
+
+// Catálogo de serviços da casa (barbearia/salão): o que aparece no
+// agendamento online e no atalho da Agenda. Preço/duração oficiais —
+// o histórico de agendamentos só complementa o que não está aqui.
+model Service {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  priceCents  Int      @default(0)
+  durationMin Int      @default(30)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
 }
 
 model AutomationRule {
@@ -704,22 +769,22 @@ model AutomationNotification {
 // ─── Marketplace (Fornecedores, Lotes, NF-e, Pedidos de Compra) ───────────────
 
 model Supplier {
-  id           String   @id @default(uuid())
-  tenantId     String
-  legalName    String
-  tradeName    String?
-  cnpj         String?
-  email        String?
-  phone        String?
-  apiBaseUrl   String?
-  apiAuthType  String?
-  apiKeyCipher String?
-  leadTimeDays Int      @default(3)
-  minOrderCents Int     @default(0)
-  isActive     Boolean  @default(true)
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(uuid())
+  tenantId      String
+  legalName     String
+  tradeName     String?
+  cnpj          String?
+  email         String?
+  phone         String?
+  apiBaseUrl    String?
+  apiAuthType   String?
+  apiKeyCipher  String?
+  leadTimeDays  Int      @default(3)
+  minOrderCents Int      @default(0)
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   products     ProductSupplier[]
@@ -779,24 +844,29 @@ model StockBatch {
 }
 
 model NfeEntry {
-  id          String   @id @default(uuid())
-  tenantId    String
-  supplierId  String?
-  accessKey   String   @unique
-  nfeNumber   String
-  series      String
-  issueDate   DateTime
-  totalCents  Int      @default(0)
-  xmlRaw      String?
-  status      String   @default("PENDING_RECONCILE")
-  importedAt  DateTime @default(now())
+  id         String   @id @default(uuid())
+  tenantId   String
+  supplierId String?
+  // C7: era `@unique` global. Como a checagem de duplicidade não filtrava por
+  // tenant, o tenant B recebia "já foi importada" para uma nota do tenant A —
+  // vazamento de existência e bloqueio de importação legítima (reenvio do
+  // fornecedor, XML repetido). A unicidade correta é por tenant.
+  accessKey  String
+  nfeNumber  String
+  series     String
+  issueDate  DateTime
+  totalCents Int      @default(0)
+  xmlRaw     String?
+  status     String   @default("PENDING_RECONCILE")
+  importedAt DateTime @default(now())
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  supplier Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  items    NfeEntryItem[]
-  batches  StockBatch[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items          NfeEntryItem[]
+  batches        StockBatch[]
   purchaseOrders PurchaseOrder[] @relation("NfeEntryPurchaseOrders")
 
+  @@unique([tenantId, accessKey])
   @@index([tenantId, issueDate])
   @@index([tenantId, status])
 }
@@ -835,11 +905,11 @@ model PurchaseOrder {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  supplier Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   items    PurchaseOrderItem[]
   batches  StockBatch[]
-  nfeLink  NfeEntry[] @relation("NfeEntryPurchaseOrders")
+  nfeLink  NfeEntry[]          @relation("NfeEntryPurchaseOrders")
 
   @@index([tenantId, status])
   @@index([supplierId, status])
@@ -886,7 +956,7 @@ model StockLoss {
   tenantId     String
   productId    String
   quantity     Float
-  reason       String   // EXPIRED, DAMAGED, BREAKAGE, THEFT, DISCARD, OTHER
+  reason       String // EXPIRED, DAMAGED, BREAKAGE, THEFT, DISCARD, OTHER
   costCents    Int      @default(0)
   notes        String?
   reportedById String?
@@ -904,7 +974,7 @@ model StockMovement {
   id           String   @id @default(uuid())
   tenantId     String
   productId    String
-  type         String   // ENTRY_NFE, ENTRY_MANUAL, SALE_POS, LOSS_AVARIA, ADJUSTMENT, RETURN, TRANSFER
+  type         String // ENTRY_NFE, ENTRY_MANUAL, SALE_POS, LOSS_AVARIA, ADJUSTMENT, RETURN, TRANSFER
   quantity     Float
   balanceAfter Float
   referenceId  String?
@@ -920,12 +990,12 @@ model StockMovement {
 }
 
 model InventoryAudit {
-  id        String    @id @default(uuid())
-  tenantId  String
-  status    String    @default("OPEN") // OPEN, COMPLETED, CANCELED
-  openedAt  DateTime  @default(now())
-  closedAt  DateTime?
-  notes     String?
+  id       String    @id @default(uuid())
+  tenantId String
+  status   String    @default("OPEN") // OPEN, COMPLETED, CANCELED
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+  notes    String?
 
   tenant Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   items  InventoryAuditItem[]
@@ -949,18 +1019,25 @@ model InventoryAuditItem {
 }
 
 model BillPayable {
-  id          String    @id @default(uuid())
-  tenantId    String
-  supplierId  String?
-  description String
-  category    String    @default("FORNECEDOR") // FORNECEDOR, ALUGUEL, ENERGIA, AGUA, FOLHA, IMPOSTOS, MANUTENCAO, OUTROS
-  amountCents Int
-  dueDate     DateTime
-  paidAt      DateTime?
-  status      String    @default("PENDING") // PENDING, PAID, OVERDUE, CANCELED
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  tenantId       String
+  supplierId     String?
+  description    String
+  category       String    @default("FORNECEDOR") // FORNECEDOR, ALUGUEL, ENERGIA, AGUA, FOLHA, IMPOSTOS, MANUTENCAO, OUTROS
+  amountCents    Int
+  dueDate        DateTime
+  paidAt         DateTime?
+  status         String    @default("PENDING") // PENDING, PAID, OVERDUE, CANCELED
+  notes          String?
+  // Conta fixa/recorrente (aluguel, energia, internet): ao dar baixa, o
+  // sistema gera sozinho a próxima ocorrência no `dueDay` do mês seguinte.
+  isRecurring    Boolean   @default(false)
+  // Dia do mês do vencimento recorrente (1-31). Nulo = conta avulsa.
+  dueDay         Int?
+  // Nota de compra que originou a despesa (baixa automática na confirmação).
+  purchaseNoteId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -970,26 +1047,55 @@ model BillPayable {
 }
 
 model BillReceivable {
-  id          String    @id @default(uuid())
-  tenantId    String
-  customerId  String?
-  orderId     String?
-  description String
-  amountCents Int
-  dueDate     DateTime
-  receivedAt  DateTime?
-  status      String    @default("PENDING") // PENDING, RECEIVED, OVERDUE, CANCELED
-  type        String    @default("FIADO")   // FIADO, CREDIT_CARD, OUTROS
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  tenantId          String
+  customerId        String?
+  orderId           String?
+  description       String
+  amountCents       Int
+  paidCents         Int       @default(0)
+  dueDate           DateTime
+  receivedAt        DateTime?
+  status            String    @default("PENDING") // PENDING, PARTIAL, RECEIVED, OVERDUE, CANCELED
+  type              String    @default("FIADO") // FIADO, CREDIT_CARD, OUTROS
+  // Parcelamento: N parcelas da mesma venda ligadas pelo groupId.
+  installmentNumber Int?
+  installmentsTotal Int?
+  groupId           String?
+  paymentMethod     String?
+  purchaseDate      DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  order    Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payments ReceivablePayment[]
 
   @@index([tenantId, status])
   @@index([dueDate])
+  @@index([groupId])
+  @@index([customerId])
+}
+
+// Histórico de recebimentos (inclusive parciais) de uma conta a receber.
+model ReceivablePayment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  billReceivableId String
+  amountCents      Int
+  method           String?
+  notes            String?
+  operatorId       String?
+  paidAt           DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bill   BillReceivable @relation(fields: [billReceivableId], references: [id], onDelete: Cascade)
+
+  @@index([billReceivableId])
+  @@index([tenantId])
 }
 
 model OrderReturn {
@@ -1030,6 +1136,16 @@ model StoreSetting {
   maxCashierDiscount    Int      @default(10)
   managerPin            String   @default("1234")
   enabledPaymentMethods String   @default("DINHEIRO,PIX,CARTAO_DEBITO,CARTAO_CREDITO,VALE,FIADO")
+  // Chave PIX do recebedor usada para gerar o BR Code (QR) na tela de
+  // pagamento. Guardada como digitada — a normalização (tirar máscara,
+  // prefixar DDI) acontece na geração do QR, para não gravar um formato que
+  // o dono não reconhece ao conferir depois.
+  pixKey                String?
+  // Nome do recebedor no BR Code. Campo obrigatório do padrão: quando vazio
+  // cai no `storeName` e, se este também faltar, em "RECEBEDOR".
+  pixReceiverName       String?
+  // Cidade do recebedor. Campo obrigatório do padrão (máx. 15, ASCII).
+  pixReceiverCity       String?
   updatedAt             DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1040,8 +1156,8 @@ model StoreSetting {
 model CashierTerminal {
   id        String   @id @default(uuid())
   tenantId  String
-  code      String   // e.g. "PDV-01"
-  name      String   // e.g. "Caixa Rápido 01"
+  code      String // e.g. "PDV-01"
+  name      String // e.g. "Caixa Rápido 01"
   status    String   @default("ACTIVE") // ACTIVE, INACTIVE, MAINTENANCE
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1060,26 +1176,59 @@ model ProductBarcode {
   multiplier Float    @default(1)
   createdAt  DateTime @default(now())
 
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, barcode])
   @@index([barcode])
 }
 
 model CashMovement {
-  id             String       @id @default(uuid())
+  id             String   @id @default(uuid())
   tenantId       String
   cashRegisterId String
-  type           String       // SANGRIA, SUPRIMENTO
+  type           String // SANGRIA, SUPRIMENTO, COMPRA
   amountCents    Int
   reason         String
   operatorId     String?
-  createdAt      DateTime     @default(now())
+  // Canal abatido (DINHEIRO/PIX/CARTAO_*) — preenchido em COMPRA de insumos.
+  paymentMethod  String?
+  // Nota de compra que originou o movimento (permite estornar ao reconfirmar).
+  purchaseNoteId String?
+  createdAt      DateTime @default(now())
 
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, cashRegisterId])
+}
+
+// ─── Histórico de fechamentos de caixa ─────────────────────────────────────
+// Cada "Salvar fechamento" grava uma foto do período (notas + totais +
+// despesas + saldo em `snapshotJson`), para o proprietário consultar e
+// REIMPRIMIR qualquer dia depois. Sem FK de usuário de propósito: apagar um
+// usuário nunca pode levar o histórico junto.
+model CashClosing {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  // TODAY, WEEK, MONTH
+  period               String   @default("TODAY")
+  periodStart          DateTime
+  periodEnd            DateTime
+  notesCount           Int      @default(0)
+  grandTotalCents      Int      @default(0)
+  totalsJson           String   @default("{}")
+  expensesPaidCents    Int      @default(0)
+  expensesPendingCents Int      @default(0)
+  netTotalCents        Int      @default(0)
+  // Foto completa (loja, notas, totais, despesas, alertas) em JSON.
+  snapshotJson         String   @default("{}")
+  createdByName        String?
+  createdAt            DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, period])
 }
 
 // ─── Restaurant OS / Multi-Tenant Food Domain Models ─────────────────────────
@@ -1096,16 +1245,21 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users         User[]
-  roles         Role[]
-  tables        Table[]
-  devices       Device[]
-  categories    ProductCategory[]
-  products      Product[]
-  tableSessions TableSession[]
-  orders        Order[]
-  waiterCalls   WaiterCall[]
-  purchaseNotes PurchaseNote[]
+  users              User[]
+  roles              Role[]
+  tables             Table[]
+  devices            Device[]
+  categories         ProductCategory[]
+  products           Product[]
+  tableSessions      TableSession[]
+  orders             Order[]
+  waiterCalls        WaiterCall[]
+  purchaseNotes      PurchaseNote[]
+  tasks              Task[]
+  aiConversations    AiConversation[]
+  tipConfig          TipConfig?
+  serviceFeePayments ServiceFeePayment[]
+  serviceFeePayouts  ServiceFeePayout[]
 
   @@index([slug])
   @@index([active])
@@ -1129,18 +1283,19 @@ model Table {
   id          String   @id @default(uuid())
   companyId   String
   number      Int
-  label       String   // ex: "Mesa 01"
+  label       String // ex: "Mesa 01"
   capacity    Int      @default(4)
   status      String   @default("FREE") // FREE, OCCUPIED
-  qrTokenHash String   // Hash SHA-256 do token opaco de QR code
+  qrTokenHash String // Hash SHA-256 do token opaco de QR code
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  devices       Device[]
-  tableSessions TableSession[]
-  orders        Order[]
-  waiterCalls   WaiterCall[]
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  devices            Device[]
+  tableSessions      TableSession[]
+  orders             Order[]
+  waiterCalls        WaiterCall[]
+  serviceFeePayments ServiceFeePayment[]
 
   @@unique([companyId, number])
   @@index([companyId])
@@ -1151,7 +1306,7 @@ model Device {
   id              String    @id @default(uuid())
   companyId       String
   tableId         String?
-  name            String    // ex: "Tablet Mesa 01", "KDS Cozinha"
+  name            String // ex: "Tablet Mesa 01", "KDS Cozinha"
   type            String    @default("TABLET") // TABLET, KDS, WAITER, POS
   tokenHash       String    @unique // Hash SHA-256 do Device Token
   status          String    @default("ACTIVE") // ACTIVE, REVOKED
@@ -1170,7 +1325,7 @@ model Device {
 model ProductModifierGroup {
   id            String   @id @default(uuid())
   productId     String
-  name          String   // ex: "Ponto da Carne", "Adicionais", "Queijo"
+  name          String // ex: "Ponto da Carne", "Adicionais", "Queijo"
   minSelectable Int      @default(0)
   maxSelectable Int      @default(1)
   isRequired    Boolean  @default(false)
@@ -1186,34 +1341,125 @@ model ProductModifierGroup {
 model ProductModifierItem {
   id         String   @id @default(uuid())
   groupId    String
-  name       String   // ex: "Ao Ponto", "Bacon Extra (+R$ 4,00)"
+  name       String // ex: "Ao Ponto", "Bacon Extra (+R$ 4,00)"
   priceCents Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  group             ProductModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group              ProductModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   orderItemModifiers OrderItemModifier[]
 
   @@index([groupId])
 }
 
 model TableSession {
-  id        String    @id @default(uuid())
-  companyId String
-  tableId   String
-  status    String    @default("OPEN") // OPEN, CLOSED
-  openedAt  DateTime  @default(now())
-  closedAt  DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  companyId     String
+  tableId       String
+  status        String    @default("OPEN") // OPEN, CLOSED
+  // Nome que o garçom dá à comanda ao abrir a mesa (ex.: "Mesa do João").
+  // É o que o mapa de salão exibe no lugar de um "Ocupada" genérico.
+  comandaName   String?
+  // Garçom responsável pela mesa/comanda (vindo do usuário logado que abriu a
+  // mesa ou lançou o pedido). Exibido no KDS para saber quem deve buscar.
+  waiterName    String?
+  // Id do usuário responsável (ver comentário em Order.waiterId).
+  waiterId      String?
+  // Quantidade de clientes informada na abertura. Já era enviada pelo front e
+  // era descartada; passa a ser gravada junto, na mesma migração.
+  customerCount Int?
+  openedAt      DateTime  @default(now())
+  closedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  table   Table   @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  orders  Order[]
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Cascade (e não SetNull): `tableId` é obrigatório, então apagar a mesa leva
+  // as comandas junto — SetNull aqui é inválido e o Prisma barra o schema.
+  table      Table?             @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  orders     Order[]
+  serviceFee ServiceFeePayment?
 
   @@index([companyId])
   @@index([tableId])
   @@index([status])
+}
+
+// ─── Caixinha dos 10% (taxa de serviço) ────────────────────────────────────
+// Dinheiro dos 10% NUNCA se mistura com o caixa da empresa: cada pagamento
+// nasce vinculado a uma comanda real (tableSessionId único — sem nota, sem
+// registro) e a divisão semanal baixa o saldo com trilha completa.
+model TipConfig {
+  id            String   @id @default(uuid())
+  companyId     String   @unique
+  // Taxa em basis points: 1000 = 10%.
+  percentBps    Int      @default(1000)
+  // Cargos que participam da divisão, em JSON (ex.: ["WAITER","KITCHEN"]).
+  eligibleRoles String   @default("[\"WAITER\",\"KITCHEN\",\"CLEANING\"]")
+  active        Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model ServiceFeePayment {
+  id                  String    @id @default(uuid())
+  companyId           String
+  // 1:1 com a comanda: o banco impede dois 10% na mesma nota e impede 10%
+  // avulso (sem insert direto não há outro caminho de criação).
+  tableSessionId      String    @unique
+  tableId             String?
+  clientName          String?
+  orderNumbers        String    @default("[]")
+  billTotalCents      Int       @default(0)
+  suggestedCents      Int       @default(0)
+  paidCents           Int       @default(0)
+  // NOT_PAID (não pagou) · PAID (pagou) · OVER (pagou a mais) · UNDER (a menos)
+  status              String    @default("NOT_PAID")
+  paymentMethod       String?
+  responsibleName     String?
+  responsibleId       String?
+  // Foto da nota no fechamento (itens, totais, mesa, horários): a verificação
+  // usa o original, mesmo que o pedido seja corrigido depois no histórico.
+  snapshotJson        String    @default("{}")
+  // Trilha visível de ajustes (além do AuditLog): quem, quando, antes/depois e
+  // motivo — motivo é obrigatório para editar ou excluir.
+  editCount           Int       @default(0)
+  lastEditBy          String?
+  lastEditAt          DateTime?
+  lastEditReason      String?
+  lastEditBeforeCents Int?
+  lastEditAfterCents  Int?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tableSession TableSession @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
+  table        Table?       @relation(fields: [tableId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, status])
+}
+
+model ServiceFeePayout {
+  id               String   @id @default(uuid())
+  companyId        String
+  periodStart      DateTime
+  periodEnd        DateTime
+  totalCents       Int      @default(0)
+  participantCount Int      @default(0)
+  amountEachCents  Int      @default(0)
+  // Sobra de centavos da divisão que permanece no caixa.
+  remainderCents   Int      @default(0)
+  // Foto: [{userId, name, role, amountCents}].
+  participantsJson String   @default("[]")
+  confirmedBy      String?
+  confirmedByName  String?
+  createdAt        DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
 }
 
 model OrderItemModifier {
@@ -1250,20 +1496,29 @@ model WaiterCall {
 // ─── Módulo de Notas de Compra (ERP & Gastro) ─────────────────────────────────
 
 model PurchaseNote {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   tenantId      String?
   companyId     String?
-  title         String   @default("Nota de Compra")
-  status        String   @default("PENDING") // PENDING (🟡), IN_PROGRESS (🔵), CONFIRMED (🟢), PARTIAL (🟠)
-  createdByName String?  // ex: "Cozinheiro Carlos", "Chef Marcos"
-  buyerName     String?  // ex: "Comprador Marcos"
-  notes         String?  // Observações gerais da nota
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  title         String    @default("Nota de Compra")
+  status        String    @default("PENDING") // PENDING (🟡), IN_PROGRESS (🔵), CONFIRMED (🟢), PARTIAL (🟠)
+  createdByName String? // ex: "Cozinheiro Carlos", "Chef Marcos"
+  buyerName     String? // ex: "Comprador Marcos"
+  notes         String? // Observações gerais da nota
+  // Pagamento da compra (preenchido na confirmação): valor final gasto e
+  // divisão por canal em JSON `[{method, amountCents}]` — único, combinado ou
+  // espelhando o rateio por item. É o que abate cada saldo do caixa.
+  totalCents    Int       @default(0)
+  paymentsJson  String    @default("[]")
+  // Quando foi pago/confirmado financeiramente (nulo = ainda não pago).
+  paidAt        DateTime?
+  // Fornecedor/origem da compra (texto livre, sem vínculo obrigatório).
+  supplierName  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  company       Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  items         PurchaseNoteItem[]
+  tenant  Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   PurchaseNoteItem[]
 
   @@index([tenantId, status])
   @@index([companyId, status])
@@ -1273,15 +1528,506 @@ model PurchaseNote {
 model PurchaseNoteItem {
   id             String   @id @default(uuid())
   purchaseNoteId String
-  itemName       String   // ex: "Arroz", "Batata", "Tomate"
-  quantity       String   // ex: "2 sacos", "10 kg"
+  itemName       String // ex: "Arroz", "Batata", "Tomate"
+  quantity       String // ex: "2 sacos", "10 kg"
   status         String   @default("PENDING") // PENDING, BOUGHT (✅), NOT_BOUGHT (❌)
-  buyerNotes     String?  // ex: "Não consegui encontrar batata hoje."
+  buyerNotes     String? // ex: "Não consegui encontrar batata hoje."
+  // Valor pago neste item + canal (rateio opcional por item; soma = total).
+  priceCents     Int      @default(0)
+  paymentMethod  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  purchaseNote   PurchaseNote @relation(fields: [purchaseNoteId], references: [id], onDelete: Cascade)
+  purchaseNote PurchaseNote @relation(fields: [purchaseNoteId], references: [id], onDelete: Cascade)
 
   @@index([purchaseNoteId])
 }
 
+// ─── Operational Tasks & Routines ───────────────────────────────────────────
+
+model Task {
+  id           String  @id @default(uuid())
+  tenantId     String?
+  companyId    String?
+  title        String
+  description  String?
+  assignedRole String? // "Garçom", "Cozinha", "Caixa", "Estoque", "Limpeza", "Todos"
+  assignedToId String?
+  createdById  String?
+
+  frequency  String  @default("TODAY") // TODAY, DAILY, WEEKLY, CUSTOM_DAYS
+  repeatDays String? // JSON array: '["SEG", "QUA", "SEX"]'
+
+  triggerType  String   @default("TIME") // TIME, AFTER_CLOSING, BEFORE_OPENING, AFTER_LUNCH
+  // Momento(s) de execução escolhidos. Permite combinar mais de um (ex: antes
+  // da abertura E horário fixo) numa mesma rotina. Guardado como JSON array.
+  // Ausente/vazio => usa apenas `triggerType`, mantendo as tarefas antigas válidas.
+  triggerTypes String?
+  dueTime      String? // ex: "22:30", "15:00", "08:00"
+  dueDate      DateTime @default(now())
+
+  priority            String  @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
+  requireConfirmation Boolean @default(false)
+
+  isTemplate Boolean @default(false)
+  templateId String?
+
+  status          String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, OVERDUE
+  completedAt     DateTime?
+  completedById   String?
+  completedByName String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedTo  User?    @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  completedBy User?    @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([companyId, status])
+  @@index([dueDate])
+  @@index([assignedToId])
+  @@index([assignedRole])
+}
+
+// Eventos do Calendário da empresa (visão Google Calendar): compromissos,
+// visitas, prazos. Recorrência simples em JSON; ocorrências são virtuais
+// (expandidas na leitura) — editar "só este" gera cópia avulsa + exceção.
+model CalendarEvent {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  title                String
+  description          String?
+  location             String?
+  startsAt             DateTime
+  endsAt               DateTime
+  allDay               Boolean  @default(false)
+  color                String   @default("#0E54F8")
+  category             String   @default("Compromisso")
+  recurrence           String? // JSON: {freq: DAILY|WEEKLY|MONTHLY|YEARLY, interval?, until?, count?}
+  parentId             String? // cabeça da série quando for cópia avulsa de ocorrência
+  recurrenceExceptions String? // JSON: ["2026-09-20T14:00:00.000Z", ...] (cabeça da série)
+  reminderMin          Int? // 10, 60, 1440 (minutos antes)
+  guests               String? // JSON: [{name, status: PENDING|ACCEPTED|DECLINED}]
+  createdById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startsAt])
+}
+
+// ─── Copiloto de IA: Histórico de Conversas ──────────────────────────────────
+
+model AiConversation {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  companyId String?
+  userId    String?
+  title     String   @default("Nova conversa")
+  model     String?
+  pinned    Boolean  @default(false)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company  Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([companyId, updatedAt])
+  @@index([companyId, archived])
+  @@index([userId])
+}
+
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String // user | model
+  text           String
+  thought        String?
+  toolsUsed      String? // JSON serializado
+  resultsSummary String? // JSON serializado
+  modelUsed      String?
+  usedFallback   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// ─── Academia: gestão fitness ─────────────────────────────────────────────
+// Vertical ACADEMIA (niche BARBERSHOP + Company.category = 'ACADEMIA').
+// Aluno é entidade própria — não reaproveita Customer — porque matrícula,
+// vencimento, check-in, treino e aula coletiva têm ciclo de vida fitness.
+
+model GymStudent {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  phone     String?
+  email     String?
+  document  String?
+  birthDate DateTime?
+  // ATIVO com mensalidade em dia | PENDENTE aguardando pagamento |
+  // VENCIDO com mensalidade atrasada | PAUSADO matrícula pausada |
+  // CANCELADO sem vínculo ativo
+  status    String    @default("ATIVO")
+  planName  String?
+  dueDate   DateTime?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  enrollments GymEnrollment[]
+  checkIns    GymCheckIn[]
+  workouts    GymWorkout[]
+  assessments GymAssessment[]
+  bookings    GymClassBooking[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, name])
+}
+
+model GymEnrollment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  studentId        String
+  plan             String
+  startDate        DateTime
+  endDate          DateTime
+  priceCents       Int      @default(0)
+  // ATIVA | PAUSADA | CANCELADA | EXPIRADA
+  status           String   @default("ATIVA")
+  // Conta a receber gerada na matrícula (integração com o Financeiro).
+  billReceivableId String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student GymStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([tenantId, status])
+}
+
+model GymCheckIn {
+  id          String   @id @default(uuid())
+  tenantId    String
+  studentId   String
+  // MANUAL (recepção) | QR_CODE (catraca/app)
+  method      String   @default("MANUAL")
+  // BLOQUEADO registra tentativa de aluno irregular (catraca negada).
+  blocked     Boolean  @default(false)
+  blockReason String?
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student GymStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([studentId])
+}
+
+model GymWorkout {
+  id         String    @id @default(uuid())
+  tenantId   String
+  studentId  String
+  title      String
+  // SEG | TER | QUA | QUI | SEX | SAB | DOM — dia da ficha no programa semanal.
+  dayOfWeek  String?
+  // JSON legado: [{name, sets, reps, load}] — mantido para fichas antigas;
+  // fichas novas usam os itens vinculados à biblioteca.
+  exercises  String    @default("[]")
+  coach      String?
+  validUntil DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student GymStudent       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  items   GymWorkoutItem[]
+
+  @@index([tenantId])
+  @@index([studentId])
+}
+
+// ─── Biblioteca de movimentos da academia ─────────────────────────────────
+// Exercício base cadastrado pelo personal: nome formal, equipamento, grupo
+// muscular e mídia de demonstração (URL de vídeo/GIF). A ficha do aluno
+// referencia estes registros — nunca texto livre — para que cada movimento
+// tenha sempre o vídeo de execução correta.
+
+model GymExercise {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  equipment   String?
+  // QUADRICEPS | POSTERIOR | GLUTEO | PEITORAL | COSTAS | OMBRO | BICEPS |
+  // TRICEPS | ABDOMEN | PANTURRILHA | CARDIO | CORPO_INTEIRO | OUTRO
+  muscleGroup String   @default("OUTRO")
+  // URL de vídeo/GIF demonstrativo (YouTube ou arquivo direto).
+  mediaUrl    String?
+  // YOUTUBE | VIDEO | GIF — inferido no cadastro quando omitido.
+  mediaType   String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  GymWorkoutItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, muscleGroup])
+  @@index([tenantId, name])
+}
+
+// ─── Item da ficha do aluno ───────────────────────────────────────────────
+// Vínculo ficha ↔ movimento base, com prescrição individual do personal.
+// Repetições validadas no serviço: 0–40.
+
+model GymWorkoutItem {
+  id          String   @id @default(uuid())
+  tenantId    String
+  workoutId   String
+  exerciseId  String
+  position    Int      @default(0)
+  sets        Int      @default(3)
+  reps        Int      @default(12)
+  load        String?
+  // Descanso em segundos entre séries.
+  restSeconds Int?
+  // Observações técnicas: cadência, amplitude, carga sugerida.
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workout  GymWorkout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise GymExercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@index([workoutId])
+  @@index([exerciseId])
+}
+
+// ─── Avaliação física completa ────────────────────────────────────────────
+// Acompanhamento profissional do aluno: anamnese, antropometria, perimetria,
+// dobras cutâneas (com cálculo por protocolo), bioimpedância, fotos de
+// postura e evolução entre avaliações. Seções flexíveis em JSON tipado no
+// serviço; IMC, RCQ e %G são calculados e persistidos a cada gravação.
+
+model GymAssessment {
+  id            String   @id @default(uuid())
+  tenantId      String
+  studentId     String
+  date          DateTime @default(now())
+  professional  String?
+  // EMAGRECIMENTO | HIPERTROFIA | REABILITACAO | CONDICIONAMENTO | OUTRO
+  goal          String?
+  // JSON anamnese: {birthDate, age, sex, profession, emergencyContact,
+  // injuries, surgeries, chronicPain, conditions[], medications,
+  // limitations, activityLevel, trainingHistory, sleep, waterIntake, mainGoal}
+  anamnesis     String   @default("{}")
+  // Antropometria direta: altura, peso, envergadura, FC repouso, PA.
+  heightCm      Float?
+  weightKg      Float?
+  wingspanCm    Float?
+  restingHr     Int?
+  systolic      Int?
+  diastolic     Int?
+  // JSON perimetria (cm): {neck, chest, waist, abdomen, hip, armRelaxedR,
+  // armRelaxedL, armFlexedR, armFlexedL, forearmR, forearmL, thighProxR,
+  // thighProxL, thighMedR, thighMedL, thighDistR, thighDistL, calfR, calfL}
+  perimetry     String   @default("{}")
+  // JSON dobras (mm): {triceps, biceps, subscapular, axillary, chest,
+  // suprailiac, abdomen, thigh, calf}
+  skinfolds     String   @default("{}")
+  // JSON bioimpedância: {bodyFatPct, muscleMassKg, visceralFat, bmrKcal,
+  // metabolicAge, bodyWaterPct}
+  bioimpedance  String   @default("{}")
+  // Protocolo de dobras: POLLOCK_3 | POLLOCK_7 | PETROSKI_4
+  protocol      String?
+  bodyDensity   Float?
+  bodyFatPct    Float?
+  bmi           Float?
+  waistHipRatio Float?
+  // JSON fotos de postura: {front, back, left, right} (dataURL imagem).
+  photos        String   @default("{}")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student GymStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([studentId, date])
+}
+
+model GymClass {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  coach       String?
+  room        String?
+  startsAt    DateTime
+  durationMin Int      @default(60)
+  capacity    Int      @default(20)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookings GymClassBooking[]
+
+  @@index([tenantId, startsAt])
+}
+
+model GymClassBooking {
+  id        String   @id @default(uuid())
+  tenantId  String
+  classId   String
+  studentId String
+  // RESERVADO | PRESENTE | FALTOU | CANCELADO
+  status    String   @default("RESERVADO")
+  createdAt DateTime @default(now())
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  class   GymClass   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student GymStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, studentId])
+  @@index([tenantId])
+  @@index([classId])
+}
+
+// ─── Refrigeração: ordens de serviço ──────────────────────────────────────
+// Vertical REFRIGERACAO (niche BARBERSHOP + Company.category). A OS tem ciclo
+// de vida próprio (ABERTA → AGENDADA → EM_ATENDIMENTO → AGUARDANDO_PECA →
+// CONCLUIDA / CANCELADA) que tarefas genéricas não carregam: equipamento,
+// diagnóstico, peças com baixa de estoque, fotos, técnico e valor que vira
+// conta a receber ao concluir. Orçamento aprovado gera OS.
+
+model ServiceEquipment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  customerId String?
+  clientName String?
+  // SPLIT | JANELA | PORTATIL | GELADEIRA | FREEZER | BEBEDOURO | CAMARA_FRIA | OUTRO
+  type       String   @default("SPLIT")
+  brand      String?
+  model      String?
+  capacity   String?
+  location   String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orders   ServiceOrder[]
+
+  @@index([tenantId])
+  @@index([customerId])
+}
+
+model ServiceOrder {
+  id               String    @id @default(uuid())
+  tenantId         String
+  number           Int
+  customerId       String?
+  clientName       String
+  phone            String?
+  address          String?
+  equipmentId      String?
+  equipmentDesc    String?
+  // INSTALACAO | MANUTENCAO | LIMPEZA | RECARGA | CONSERTO | VISITA
+  serviceType      String    @default("MANUTENCAO")
+  reportedProblem  String?
+  diagnosis        String?
+  performedService String?
+  technicianId     String?
+  technicianName   String?
+  scheduledAt      DateTime?
+  // ABERTA | AGENDADA | EM_ATENDIMENTO | AGUARDANDO_PECA | CONCLUIDA | CANCELADA
+  status           String    @default("ABERTA")
+  laborCents       Int       @default(0)
+  partsCents       Int       @default(0)
+  travelCents      Int       @default(0)
+  discountCents    Int       @default(0)
+  totalCents       Int       @default(0)
+  // JSON: ["data:image/jpeg;base64,..."] — até 3 fotos do serviço.
+  photos           String?
+  billReceivableId String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer  Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  equipment ServiceEquipment?  @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  items     ServiceOrderItem[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status])
+  @@index([tenantId, scheduledAt])
+  @@index([technicianId])
+}
+
+model ServiceOrderItem {
+  id             String  @id @default(uuid())
+  orderId        String
+  productId      String?
+  partName       String
+  quantity       Float
+  unitPriceCents Int     @default(0)
+  totalCents     Int     @default(0)
+
+  order   ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model ServiceQuote {
+  id            String    @id @default(uuid())
+  tenantId      String
+  customerId    String?
+  clientName    String
+  phone         String?
+  address       String?
+  equipmentDesc String?
+  laborCents    Int       @default(0)
+  partsCents    Int       @default(0)
+  travelCents   Int       @default(0)
+  discountCents Int       @default(0)
+  totalCents    Int       @default(0)
+  // PENDENTE | APROVADO | RECUSADO | EXPIRADO
+  status      String   @default("PENDENTE")
+  validUntil  DateTime?
+  // Agendamento da visita: definido no orçamento e herdado pela OS ao aprovar.
+  scheduledAt DateTime?
+  technicianId String?
+  technicianName String?
+  orderId     String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([customerId])
+}

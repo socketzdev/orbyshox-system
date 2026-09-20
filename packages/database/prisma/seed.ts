@@ -212,16 +212,16 @@ async function main() {
       address: 'Av. Central, 480 · São Paulo - SP',
     },
     {
-      companyName: 'Supermercado Economia Total LTDA',
-      tradeName: 'Economia Total',
+      companyName: 'Empresa Modelo Universal LTDA',
+      tradeName: 'Modelo Universal',
       cnpj: '12.345.678/0001-03',
-      niche: 'SUPERMARKET',
-      email: 'contato@economiatotal.com.br',
+      niche: 'UNIVERSAL',
+      email: 'contato@modelouniversal.com.br',
       phone: '(16) 99994-6494',
       status: TENANT_STATUS.TRIAL,
       trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       planId: basicPlan.id,
-      address: 'Rua das Palmeiras, 900 · São Paulo - SP',
+      address: 'Rua Central, 100 · São Paulo - SP',
     },
     {
       companyName: 'Pizzaria Bella Napoli LTDA',
@@ -299,6 +299,8 @@ async function main() {
             ? 'bistro'
             : tenantFields.niche === 'BARBERSHOP'
             ? 'studio'
+            : tenantFields.niche === 'UNIVERSAL'
+            ? 'minimal'
             : 'market',
         theme: '{}',
         content: '{}',
